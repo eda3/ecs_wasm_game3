@@ -1,0 +1,62 @@
+[package]
+name = "ecs_wasm_game2"
+version = "0.1.0"
+edition = "2021"
+authors = ["ECS Wasm Game Developer"]
+description = "A multiplayer game using custom ECS and WebAssembly"
+
+# wasm-packとwasm-bindgenのバージョン統一のための設定
+[package.metadata.wasm-pack.profile.release]
+wasm-bindgen = { version = "0.2.100" }
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "ecs_wasm_game2"
+path = "src/lib.rs"
+
+[dependencies]
+js-sys = "0.3.64"
+web-sys = { version = "0.3.64", features = [
+  "console",
+  "Document",
+  "Element",
+  "HtmlCanvasElement",
+  "Window",
+  "CanvasRenderingContext2d",
+  "Performance",
+  "WebSocket",
+  "MessageEvent",
+  "ErrorEvent",
+  "CloseEvent",
+  "KeyboardEvent",
+  "MouseEvent",
+  "Event",
+  "EventTarget",
+  "HtmlElement",
+  "CssStyleDeclaration",
+  "DomRect",
+  "BinaryType",
+]}
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+rand = { version = "0.8.5", features = ["small_rng", "getrandom"] }
+getrandom = { version = "0.2", features = ["js"] }
+uuid = { version = "1.4.1", features = ["v4", "js"] }
+log = "0.4"
+wasm-logger = "0.2"
+wasm-bindgen = { version = "0.2.100" }
+wasm-bindgen-futures = "0.4"
+futures = "0.3"
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3.37"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[features]
+default = []
+debug = ["log/max_level_debug", "log/release_max_level_debug"]

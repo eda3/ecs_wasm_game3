@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECS Wasm マルチプレイヤーゲーム</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script type="module" src="js/index.js"></script>
+</head>
+
+<body>
+    <div class="game-container">
+        <h1>ECS Wasm マルチプレイヤーゲーム 🎮</h1>
+
+        <div class="canvas-container">
+            <canvas id="game-canvas" width="800" height="600"></canvas>
+        </div>
+
+        <div class="game-controls">
+            <div class="control-section">
+                <h2>操作方法 🕹️</h2>
+                <ul>
+                    <li>移動: WASDキー または 矢印キー</li>
+                    <li>アクション: スペースキー または マウス左クリック</li>
+                </ul>
+            </div>
+
+            <div class="control-section">
+                <h2>ネットワーク 🌐</h2>
+                <div class="network-controls">
+                    <input type="text" id="server-url" value="ws://162.43.8.148:8101" placeholder="サーバーURL">
+                    <button id="connect-btn">接続</button>
+                    <span id="connection-status">未接続</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="game-debug">
+            <h2>デバッグ情報 🛠️</h2>
+            <div id="debug-info">
+                <p>FPS: <span id="fps-counter">0</span></p>
+                <p>エンティティ数: <span id="entity-counter">0</span></p>
+                <p>プレイヤー数: <span id="player-counter">0</span></p>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
