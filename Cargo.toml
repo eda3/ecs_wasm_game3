@@ -16,27 +16,7 @@ path = "src/lib.rs"
 
 [dependencies]
 js-sys = "0.3.64"
-web-sys = { version = "0.3.64", features = [
-  "console",
-  "Document",
-  "Element",
-  "HtmlCanvasElement",
-  "Window",
-  "CanvasRenderingContext2d",
-  "Performance",
-  "WebSocket",
-  "MessageEvent",
-  "ErrorEvent",
-  "CloseEvent",
-  "KeyboardEvent",
-  "MouseEvent",
-  "Event",
-  "EventTarget",
-  "HtmlElement",
-  "CssStyleDeclaration",
-  "DomRect",
-  "BinaryType",
-]}
+web-sys = { version = "0.3.64", features = ["console", "Document", "Element", "HtmlCanvasElement", "Window", "CanvasRenderingContext2d", "Performance", "WebSocket", "MessageEvent", "ErrorEvent", "CloseEvent", "KeyboardEvent", "MouseEvent", "Event", "EventTarget", "HtmlElement", "CssStyleDeclaration", "DomRect", "BinaryType", "HtmlImageElement", "AudioBuffer"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = { version = "0.8.5", features = ["small_rng", "getrandom"] }
