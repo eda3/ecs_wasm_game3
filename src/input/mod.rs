@@ -11,6 +11,12 @@ use web_sys::KeyboardEvent;
 
 use crate::ecs::{Component, Entity, System, World};
 
+pub mod key_codes;
+pub mod gestures;
+
+pub use key_codes::*;
+pub use gestures::*;
+
 /// キーボードのキーコード用の型エイリアス
 pub type KeyCode = u32;
 
@@ -639,27 +645,27 @@ impl InputSystem {
     /// デフォルトのキーバインドを設定
     fn setup_default_bindings(state: &mut InputState) {
         // キーボード
-        state.action_mapping.bind_key("move_up", KeyboardEvent::KEY_W as u32)
-            .bind_key("move_up", KeyboardEvent::KEY_ARROW_UP as u32)
-            .bind_key("move_down", KeyboardEvent::KEY_S as u32)
-            .bind_key("move_down", KeyboardEvent::KEY_ARROW_DOWN as u32)
-            .bind_key("move_left", KeyboardEvent::KEY_A as u32)
-            .bind_key("move_left", KeyboardEvent::KEY_ARROW_LEFT as u32)
-            .bind_key("move_right", KeyboardEvent::KEY_D as u32)
-            .bind_key("move_right", KeyboardEvent::KEY_ARROW_RIGHT as u32)
-            .bind_key("jump", KeyboardEvent::KEY_SPACE as u32)
-            .bind_key("action", KeyboardEvent::KEY_E as u32)
-            .bind_key("attack", KeyboardEvent::KEY_MOUSE_LEFT as u32);
+        state.action_mapping.bind_key("move_up", KEY_W)
+            .bind_key("move_up", KEY_UP)
+            .bind_key("move_down", KEY_S)
+            .bind_key("move_down", KEY_DOWN)
+            .bind_key("move_left", KEY_A)
+            .bind_key("move_left", KEY_LEFT)
+            .bind_key("move_right", KEY_D)
+            .bind_key("move_right", KEY_RIGHT)
+            .bind_key("jump", KEY_SPACE)
+            .bind_key("action", KEY_E)
+            .bind_key("attack", MOUSE_LEFT);
         
         // マウス
         state.action_mapping.bind_mouse_button("attack", 0)
             .bind_mouse_button("aim", 1);
         
         // キーリピート設定
-        state.action_mapping.set_key_repeat(KeyboardEvent::KEY_W as u32, 300, 100)
-            .set_key_repeat(KeyboardEvent::KEY_S as u32, 300, 100)
-            .set_key_repeat(KeyboardEvent::KEY_A as u32, 300, 100)
-            .set_key_repeat(KeyboardEvent::KEY_D as u32, 300, 100);
+        state.action_mapping.set_key_repeat(KEY_W, 300, 100)
+            .set_key_repeat(KEY_S, 300, 100)
+            .set_key_repeat(KEY_A, 300, 100)
+            .set_key_repeat(KEY_D, 300, 100);
     }
 }
 
