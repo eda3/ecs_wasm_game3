@@ -3,7 +3,7 @@
 //! このモジュールは、クライアント/サーバー間の通信を担当します。
 //! プレイヤーの同期、ゲーム状態の共有、予測と補正を行います。
 
-use crate::ecs::{Component, Entity, World};
+use crate::ecs::{Component, Entity, World, Resource};
 use wasm_bindgen::prelude::*;
 use std::collections::HashMap;
 
@@ -14,6 +14,64 @@ pub enum ConnectionState {
     Connecting,
     Connected,
     Disconnecting,
+    Error(String),
+}
+
+/// ネットワークリソース
+#[derive(Debug, Resource)]
+pub struct NetworkResource {
+    /// サーバーURL
+    pub server_url: String,
+    /// プレイヤーID
+    pub player_id: Option<u32>,
+    /// 自分の制御するエンティティ
+    pub controlled_entity: Option<Entity>,
+    /// 最後に送信したシーケンス番号
+    pub last_sequence: u32,
+    /// RTT (Round Trip Time) 測定値 (ミリ秒)
+    pub rtt: f64,
+    /// サーバーとの時間オフセット
+    pub time_offset: f64,
+    /// 最後に受信したサーバー時間
+    pub last_server_time: f64,
+}
+
+impl NetworkResource {
+    /// 新しいネットワークリソースを作成
+    pub fn new(server_url: String) -> Self {
+        Self {
+            server_url,
+            player_id: None,
+            controlled_entity: None,
+            last_sequence: 0,
+            rtt: 0.0,
+            time_offset: 0.0,
+            last_server_time: 0.0,
+        }
+    }
+
+    /// 次のシーケンス番号を取得
+    pub fn next_sequence(&mut self) -> u32 {
+        self.last_sequence += 1;
+        self.last_sequence
+    }
+
+    /// サーバー時間を取得
+    pub fn get_server_time(&self) -> f64 {
+        js_sys::Date::now() + self.time_offset
+    }
+
+    /// 時間オフセットを更新
+    pub fn update_time_offset(&mut self, client_time: f64, server_time: f64) {
+        // RTTの半分をネットワーク遅延として扱う
+        let now = js_sys::Date::now();
+        let rtt = now - client_time;
+        self.rtt = rtt;
+        
+        // サーバー時間とクライアント時間の差を計算
+        self.time_offset = server_time - (now - rtt / 2.0);
+        self.last_server_time = server_time;
+    }
 }
 
 /// ネットワークマネージャー

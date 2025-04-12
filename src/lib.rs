@@ -18,9 +18,15 @@ pub fn start() {
     log::info!("WebAssembly module initialized!");
 }
 
+// ロガー初期化用のエクスポート関数
+#[wasm_bindgen]
+pub fn wasm_logger_init() {
+    wasm_logger::init(wasm_logger::Config::default());
+}
+
 // ゲームインスタンスを作成するエクスポート関数
 #[wasm_bindgen]
-pub fn init_game(canvas_id: &str) -> Result<GameInstance, JsValue> {
+pub fn initialize_game(canvas_id: &str) -> Result<GameInstance, JsValue> {
     // ゲームインスタンスを初期化して返す
     let game = GameInstance::new(canvas_id)?;
     Ok(game)
@@ -30,7 +36,9 @@ pub fn init_game(canvas_id: &str) -> Result<GameInstance, JsValue> {
 #[wasm_bindgen]
 pub struct GameInstance {
     // ゲームワールドやリソースへの参照を保持する
-    // TODO: 実装を追加
+    world: ecs::World,
+    network_client: Option<network::client::NetworkClient>,
+    last_update_time: f64,
 }
 
 #[wasm_bindgen]
@@ -39,30 +47,153 @@ impl GameInstance {
     pub fn new(canvas_id: &str) -> Result<GameInstance, JsValue> {
         console::log_1(&"Creating new game instance".into());
         
-        // TODO: キャンバス要素の取得、ゲームワールドの初期化などを実装
+        // ワールドを初期化
+        let mut world = ecs::World::new();
+        
+        // レンダリングシステムの初期化
+        rendering::init_rendering_system(&mut world, canvas_id)?;
+        
+        // 物理システムの初期化
+        physics::init_physics_system(&mut world);
+        
+        // 入力システムの初期化
+        input::init_input_system(&mut world);
+        
+        // ゲームシステムの初期化
+        game::init_game_systems(&mut world);
         
         Ok(GameInstance {
-            // フィールドの初期化
+            world,
+            network_client: None,
+            last_update_time: js_sys::Date::now(),
         })
     }
     
+    // サーバーに接続
+    #[wasm_bindgen]
+    pub fn connect_to_server(&mut self, server_url: &str) -> Result<(), JsValue> {
+        log::info!("Connecting to server: {}", server_url);
+        
+        // ネットワーク設定の作成
+        let network_config = network::NetworkConfig {
+            server_url: server_url.to_string(),
+            ..Default::default()
+        };
+        
+        // ネットワーククライアントの作成
+        let mut client = network::client::NetworkClient::new(network_config);
+        
+        // サーバーへの接続を試行
+        match client.connect() {
+            Ok(_) => {
+                log::info!("Connection initiated successfully");
+                self.network_client = Some(client);
+                
+                // ネットワークコンポーネントをワールドに追加
+                let network_resource = network::NetworkResource::new(server_url.to_string());
+                self.world.add_resource(network_resource);
+                
+                Ok(())
+            },
+            Err(err) => {
+                let error_msg = format!("Failed to connect: {:?}", err);
+                log::error!("{}", error_msg);
+                Err(JsValue::from_str(&error_msg))
+            }
+        }
+    }
+    
+    // サーバーから切断
+    #[wasm_bindgen]
+    pub fn disconnect_from_server(&mut self) -> Result<(), JsValue> {
+        if let Some(client) = &mut self.network_client {
+            match client.disconnect() {
+                Ok(_) => {
+                    log::info!("Disconnected from server");
+                    self.network_client = None;
+                    Ok(())
+                },
+                Err(err) => {
+                    let error_msg = format!("Failed to disconnect: {:?}", err);
+                    log::error!("{}", error_msg);
+                    Err(JsValue::from_str(&error_msg))
+                }
+            }
+        } else {
+            Ok(()) // 既に切断済み
+        }
+    }
+    
+    // 接続状態を取得
+    #[wasm_bindgen]
+    pub fn get_connection_state(&self) -> String {
+        if let Some(client) = &self.network_client {
+            match client.get_connection_state() {
+                network::ConnectionState::Connected => "connected",
+                network::ConnectionState::Connecting => "connecting",
+                network::ConnectionState::Disconnected => "disconnected",
+                network::ConnectionState::Disconnecting => "disconnecting",
+                network::ConnectionState::Error(msg) => {
+                    log::error!("Connection error: {}", msg);
+                    "error"
+                }
+            }.to_string()
+        } else {
+            "disconnected".to_string()
+        }
+    }
+    
     // ゲームのメインループを1フレーム進める
-    pub fn update(&mut self, delta_time: f32) {
-        // TODO: ゲームの更新処理を実装
+    #[wasm_bindgen]
+    pub fn update(&mut self) -> f32 {
+        // フレーム間の時間を計算
+        let current_time = js_sys::Date::now();
+        let delta_time = (current_time - self.last_update_time) as f32 / 1000.0;
+        self.last_update_time = current_time;
+        
+        // ネットワーククライアントの更新
+        if let Some(client) = &mut self.network_client {
+            if let Err(err) = client.update(&mut self.world) {
+                log::warn!("Network update error: {:?}", err);
+            }
+        }
+        
+        // ワールドの更新
+        self.world.update(delta_time);
+        
+        // デルタタイムを返す（パフォーマンスメトリクス用）
+        delta_time
     }
     
     // ゲームを描画
-    pub fn render(&self) {
-        // TODO: レンダリング処理を実装
+    #[wasm_bindgen]
+    pub fn render(&mut self) {
+        // レンダリングシステムによる描画
+        self.world.render();
     }
     
     // キー入力を処理
-    pub fn handle_key_input(&mut self, key_code: u32, pressed: bool) {
-        // TODO: キー入力処理を実装
+    #[wasm_bindgen]
+    pub fn handle_key_event(&mut self, event_type: &str, key_code: &str) {
+        // 入力システムにイベントを送信
+        let event = input::KeyboardEvent {
+            event_type: event_type.to_string(),
+            key: key_code.to_string(),
+        };
+        
+        self.world.handle_keyboard_event(event);
     }
     
     // マウス入力を処理
-    pub fn handle_mouse_input(&mut self, x: f32, y: f32, button: u8, pressed: bool) {
-        // TODO: マウス入力処理を実装
+    #[wasm_bindgen]
+    pub fn handle_mouse_event(&mut self, event_type: &str, x: f32, y: f32, button: Option<i32>) {
+        // 入力システムにイベントを送信
+        let event = input::MouseEvent {
+            event_type: event_type.to_string(),
+            position: (x, y),
+            button,
+        };
+        
+        self.world.handle_mouse_event(event);
     }
 }
