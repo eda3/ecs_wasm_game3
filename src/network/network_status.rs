@@ -410,13 +410,25 @@ impl NetworkStatusMonitor {
 }
 
 impl System for NetworkStatusMonitor {
-    fn run(&mut self, world: &mut World, _delta_time: f32) {
+    fn name(&self) -> &'static str {
+        "NetworkStatusMonitor"
+    }
+    
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Update
+    }
+    
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(10) // ネットワーク状態は早めに更新
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         
         // ネットワークリソースを取得
         let _network_resource = match world.get_resource::<NetworkResource>() {
             Some(_) => (), // 存在確認のみ
-            None => return, // リソースがなければ何もしない
+            None => return Ok(()), // リソースがなければ何もしない
         };
         
         // 古いパケット情報を削除
@@ -427,6 +439,8 @@ impl System for NetworkStatusMonitor {
         
         // WorldにNetworkStatusリソースを更新
         world.insert_resource(self.status.clone());
+        
+        Ok(())
     }
 }
 

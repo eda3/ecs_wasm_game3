@@ -16,12 +16,12 @@ pub trait Resource: 'static + Send + Sync + Any {
         TypeId::of::<Self>()
     }
 
-    fn as_any(&self) -> &dyn Any where Self: Sized {
-        &self
+    fn as_any(&self) -> &dyn Any + '_ where Self: Sized {
+        self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any where Self: Sized {
-        &mut self
+    fn as_any_mut(&mut self) -> &mut dyn Any + '_ where Self: Sized {
+        self
     }
 }
 
@@ -63,19 +63,26 @@ impl ResourceManager {
     /// リソースを取得
     pub fn get<T: Resource>(&self) -> Option<&T> {
         let type_id = TypeId::of::<T>();
-        self.resources.get(&type_id).and_then(|r| r.as_any().downcast_ref())
+        self.resources.get(&type_id).and_then(|r| r.as_any().downcast_ref::<T>())
     }
 
     /// リソースを可変で取得
     pub fn get_mut<T: Resource>(&mut self) -> Option<&mut T> {
         let type_id = TypeId::of::<T>();
-        self.resources.get_mut(&type_id).and_then(|r| r.as_any_mut().downcast_mut())
+        self.resources.get_mut(&type_id).and_then(|r| r.as_any_mut().downcast_mut::<T>())
     }
 
     /// リソースを削除
     pub fn remove<T: Resource>(&mut self) -> Option<T> {
         let type_id = TypeId::of::<T>();
-        self.resources.remove(&type_id).map(|r| *r.as_any().downcast().unwrap())
+        self.resources.remove(&type_id).map(|r| {
+            let boxed = Box::new(r);
+            let any_box = boxed.as_any();
+            match any_box.downcast::<T>() {
+                Ok(typed_box) => *typed_box,
+                Err(_) => panic!("Failed to downcast resource when removing it")
+            }
+        })
     }
 
     /// リソースが存在するか確認

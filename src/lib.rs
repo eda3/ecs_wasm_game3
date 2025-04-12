@@ -91,7 +91,7 @@ impl GameInstance {
                 
                 // ネットワークコンポーネントをワールドに追加
                 let network_resource = network::NetworkResource::new(server_url.to_string());
-                self.world.add_resource(network_resource);
+                self.world.insert_resource(network_resource);
                 
                 Ok(())
             },
@@ -181,7 +181,12 @@ impl GameInstance {
             key: key_code.to_string(),
         };
         
-        self.world.handle_keyboard_event(event);
+        // 入力システムを取得して処理を委譲
+        if let Some(input_system) = self.get_input_system() {
+            input_system.handle_keyboard_event(&event);
+        } else {
+            log::warn!("入力システムが見つかりません");
+        }
     }
     
     // マウス入力を処理
@@ -194,6 +199,17 @@ impl GameInstance {
             button,
         };
         
-        self.world.handle_mouse_event(event);
+        // 入力システムを取得して処理を委譲
+        if let Some(input_system) = self.get_input_system() {
+            input_system.handle_mouse_event(&event);
+        } else {
+            log::warn!("入力システムが見つかりません");
+        }
+    }
+    
+    // 入力システムを取得
+    fn get_input_system(&mut self) -> Option<&mut input::InputSystem> {
+        // 実装例: WorldからInputSystemを取得する方法
+        self.world.get_resource_mut::<input::InputSystem>()
     }
 }

@@ -242,11 +242,11 @@ impl NetworkCompressionSystem {
 }
 
 impl System for NetworkCompressionSystem {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "NetworkCompressionSystem"
     }
     
-    fn update(&mut self, world: &mut World, resources: &mut Resources) {
+    fn run(&mut self, world: &mut World, resources: &mut Resources, delta_time: f32) -> Result<(), JsValue> {
         // 現在の時間を取得
         let current_time = js_sys::Date::now();
         
@@ -261,6 +261,16 @@ impl System for NetworkCompressionSystem {
                     self.bandwidth_usage.calculate_current_bandwidth() / 1000.0);
             }
         }
+        
+        Ok(())
+    }
+
+    fn phase(&self) -> crate::ecs::SystemPhase {
+        crate::ecs::SystemPhase::Update
+    }
+
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(0) // 標準優先度
     }
 }
 
