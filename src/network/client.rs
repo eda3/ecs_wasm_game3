@@ -186,11 +186,18 @@ impl NetworkClient {
 
     /// サーバーから切断
     pub fn disconnect(&mut self) -> Result<(), NetworkError> {
-        if let Some(ws) = &self.connection {
-            if self.connection_state == ConnectionState::Connected {
+        // connection と状態を先に取得して保存
+        let connection_clone = self.connection.clone();
+        let is_connected = self.connection_state == ConnectionState::Connected;
+        
+        if let Some(ws) = connection_clone {
+            if is_connected {
+                // シーケンス番号を取得
+                let next_seq = self.next_sequence_number();
+                
                 // 切断メッセージを送信
                 let disconnect_msg = NetworkMessage::new(MessageType::Disconnect { reason: None })
-                    .with_sequence(self.next_sequence_number());
+                    .with_sequence(next_seq);
                 if let Ok(json) = disconnect_msg.to_json() {
                     if let Err(err) = ws.send_with_str(&json) {
                         web_sys::console::error_1(&format!("切断メッセージの送信エラー: {:?}", err).into());
