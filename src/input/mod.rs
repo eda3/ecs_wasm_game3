@@ -10,6 +10,8 @@ use wasm_bindgen::prelude::*;
 use web_sys::KeyboardEvent as WebKeyboardEvent;
 
 use crate::ecs::{Entity, System, World};
+use crate::ecs::component::Component;
+use crate::ecs::query::Query;
 
 pub mod key_codes;
 pub mod gestures;
@@ -626,6 +628,12 @@ pub struct InputComponent {
 /// アクションハンドラー
 pub type ActionHandler = fn(entity: Entity, world: &mut World, value: f32) -> Result<(), JsValue>;
 
+impl Component for InputComponent {
+    fn name() -> &'static str {
+        "InputComponent"
+    }
+}
+
 impl InputComponent {
     /// 新しい入力コンポーネントを作成
     pub fn new(is_controllable: bool) -> Self {
@@ -718,10 +726,12 @@ impl System for InputSystem {
         self.state.update(delta_time);
         
         // 入力コンポーネントを持つエンティティを取得
-        let entities_with_input = world.query::<&InputComponent>().iter();
+        let mut query = Query::<InputComponent>::new();
+        query.run(world)?;
+        let entities = query.entities();
         
         // 各エンティティのアクションハンドラーを実行
-        for entity in entities_with_input {
+        for entity in entities {
             if let Some(input_component) = world.get_component::<InputComponent>(entity) {
                 if !input_component.is_controllable {
                     continue;
