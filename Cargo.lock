@@ -36,9 +36,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
+name = "ecs_derive"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "ecs_wasm_game2"
 version = "0.1.0"
 dependencies = [
+ "ecs_derive",
  "futures",
  "getrandom 0.2.15",
  "js-sys",

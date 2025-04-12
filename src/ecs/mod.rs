@@ -10,6 +10,9 @@
 //! - `System`: コンポーネントを処理するロジック
 //! - `World`: ECS全体を管理する中央ハブ
 
+// マクロのリエクスポート
+pub use ecs_derive::{Component, Resource};
+
 // モジュール宣言
 pub mod entity;
 pub mod component;
@@ -27,6 +30,7 @@ pub use macros::*;
 #[macro_use]
 pub mod prelude {
     pub use crate::impl_component;
+    pub use ecs_derive::{Component, Resource};
 }
 
 /// ゲーム世界全体を表す中央のオブジェクト

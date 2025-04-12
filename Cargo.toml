@@ -27,6 +27,7 @@ wasm-logger = "0.2"
 wasm-bindgen = { version = "0.2.100" }
 wasm-bindgen-futures = "0.4"
 futures = "0.3"
+ecs_derive = { path = "./ecs_derive" }
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.37"
