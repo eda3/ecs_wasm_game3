@@ -214,7 +214,7 @@ impl System for ServerReconciliation {
         SystemPriority::new(50) // 中程度の優先度
     }
     
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), String> {
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // 現在の時刻を取得
         let now = Date::now();
         self.last_update = now;
