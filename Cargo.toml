@@ -40,3 +40,4 @@ panic = "abort"
 [features]
 default = []
 debug = ["log/max_level_debug", "log/release_max_level_debug"]
+debug_network = []
