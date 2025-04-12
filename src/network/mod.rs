@@ -10,6 +10,8 @@ pub mod protocol;
 pub mod sync;
 pub mod prediction;
 pub mod messages;
+pub mod compression_system;
+pub mod network_status;
 
 // 必要なモジュールをリエクスポート
 pub use client::NetworkClient;
@@ -17,6 +19,9 @@ pub use protocol::{NetworkMessage, MessageType};
 pub use messages::{InputData, PlayerData, ComponentData};
 pub use sync::SyncSystem;
 pub use prediction::{PredictionSystem, ClientPrediction, ServerReconciliation};
+pub use sync::{MessageCompressor, EntitySnapshot};
+pub use compression_system::NetworkCompressionSystem;
+pub use network_status::*;
 
 // 外部クレートのインポート
 use wasm_bindgen::prelude::*;

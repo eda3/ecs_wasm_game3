@@ -5,6 +5,7 @@
 
 use std::collections::{HashMap, HashSet};
 use js_sys::Date;
+use serde::{Serialize, Deserialize};
 
 use super::messages::{EntitySnapshot, ComponentData};
 use super::client::NetworkComponent;
@@ -243,7 +244,7 @@ impl SyncSystem {
     
     /// エンティティのスナップショットを作成
     fn create_entity_snapshot(&self, world: &World, entity: Entity, now: f64) -> EntitySnapshot {
-        let mut snapshot = EntitySnapshot::new(entity.id() as u32, now);
+        let mut snapshot = EntitySnapshot::new(entity.id() as u64, now);
         
         // 各コンポーネントをスナップショットに追加
         // 実際のゲームでは、コンポーネントの具体的な型と値を取得する必要がある
@@ -251,20 +252,12 @@ impl SyncSystem {
         
         // 例: 位置コンポーネント
         if let Some(position) = world.get_component::<PositionComponent>(entity) {
-            snapshot.add_component("Position", ComponentData::Position {
-                x: position.x,
-                y: position.y,
-                z: Some(position.z),
-            });
+            snapshot.with_position([position.x, position.y, position.z]);
         }
         
         // 例: 速度コンポーネント
         if let Some(velocity) = world.get_component::<VelocityComponent>(entity) {
-            snapshot.add_component("Velocity", ComponentData::Velocity {
-                x: velocity.x,
-                y: velocity.y,
-                z: Some(velocity.z),
-            });
+            snapshot.with_velocity([velocity.x, velocity.y, velocity.z]);
         }
         
         // 他のコンポーネントも同様に追加
@@ -289,7 +282,7 @@ impl SyncSystem {
         
         // スナップショットからコンポーネント更新メッセージを作成
         let message = NetworkMessage::new(MessageType::ComponentUpdate)
-            .with_entity_id(snapshot.entity_id)
+            .with_entity_id(snapshot.id)
             .with_components(snapshot.components);
             
         // メッセージのバイト数を計算（簡略化）
@@ -367,7 +360,7 @@ impl System for SyncSystem {
             // 変更がある場合のみ同期
             if !changed_components.is_empty() {
                 // 変更されたコンポーネントのみを含むスナップショットを作成
-                let mut delta_snapshot = EntitySnapshot::new(entity.id() as u32, now);
+                let mut delta_snapshot = EntitySnapshot::new(snapshot.id, now);
                 delta_snapshot.owner_id = snapshot.owner_id;
                 
                 for (name, component) in changed_components {
@@ -410,32 +403,552 @@ struct VelocityComponent {
     z: f32,
 }
 
+/// メッセージ圧縮機能をサポートするための各種構造体と実装
+#[derive(Debug, Clone, Resource)]
+pub struct MessageCompressor {
+    /// 圧縮設定
+    settings: CompressionSettings,
+    /// エンティティごとの最後に送信した状態
+    last_sent_states: HashMap<u32, EntitySnapshot>,
+    /// 圧縮統計情報
+    stats: CompressionStats,
+}
+
+/// 圧縮設定
+#[derive(Debug, Clone)]
+pub struct CompressionSettings {
+    /// デルタ圧縮を有効にする（前回の値との差分のみを送信）
+    enable_delta: bool,
+    /// フィールドマスキングを有効にする（変更があったフィールドのみを送信）
+    enable_field_masking: bool,
+    /// 浮動小数点の量子化を有効にする
+    enable_quantization: bool,
+    /// 浮動小数点の精度（小数点以下の桁数）
+    float_precision: u8,
+    /// ベクトルの精度
+    vector_precision: u8,
+    /// 回転（クォータニオン）の精度
+    rotation_precision: u8,
+}
+
+impl Default for CompressionSettings {
+    fn default() -> Self {
+        Self {
+            enable_delta: true,
+            enable_field_masking: true,
+            enable_quantization: true,
+            float_precision: 2,    // 小数点以下2桁
+            vector_precision: 2,   // ベクトルは小数点以下2桁
+            rotation_precision: 3, // 回転は小数点以下3桁（精度重要）
+        }
+    }
+}
+
+/// 圧縮統計情報
+#[derive(Debug, Clone, Default)]
+pub struct CompressionStats {
+    /// 圧縮前の合計バイト数
+    total_uncompressed_bytes: usize,
+    /// 圧縮後の合計バイト数
+    total_compressed_bytes: usize,
+    /// 処理したメッセージ数
+    message_count: usize,
+    /// デルタ圧縮で省略されたフィールド数
+    delta_skipped_fields: usize,
+    /// マスキングで省略されたフィールド数
+    masked_fields: usize,
+    /// 量子化された値の数
+    quantized_values: usize,
+}
+
+impl MessageCompressor {
+    /// 新しいメッセージ圧縮機を作成
+    pub fn new() -> Self {
+        Self {
+            settings: CompressionSettings::default(),
+            last_sent_states: HashMap::new(),
+            stats: CompressionStats::default(),
+        }
+    }
+    
+    /// カスタム設定でメッセージ圧縮機を作成
+    pub fn with_settings(settings: CompressionSettings) -> Self {
+        Self {
+            settings,
+            last_sent_states: HashMap::new(),
+            stats: CompressionStats::default(),
+        }
+    }
+    
+    /// エンティティスナップショットを圧縮
+    pub fn compress_snapshot(&mut self, snapshot: &mut EntitySnapshot) -> bool {
+        let entity_id = snapshot.entity_id;
+        let had_previous = self.last_sent_states.contains_key(&entity_id);
+        
+        // 圧縮前のサイズを推定（実際の実装ではJSONエンコードなどで計算）
+        let estimated_size_before = self.estimate_snapshot_size(snapshot);
+        self.stats.total_uncompressed_bytes += estimated_size_before;
+        
+        // デルタ圧縮（前回の状態との差分のみを送信）
+        if self.settings.enable_delta && had_previous {
+            if let Some(last_snapshot) = self.last_sent_states.get(&entity_id) {
+                self.apply_delta_compression(snapshot, last_snapshot);
+            }
+        }
+        
+        // フィールドマスキング（変更があったフィールドのみを送信）
+        if self.settings.enable_field_masking {
+            self.apply_field_masking(snapshot);
+        }
+        
+        // 浮動小数点の量子化（精度を落として送信量を減らす）
+        if self.settings.enable_quantization {
+            self.apply_quantization(snapshot);
+        }
+        
+        // 圧縮後のサイズを推定
+        let estimated_size_after = self.estimate_snapshot_size(snapshot);
+        self.stats.total_compressed_bytes += estimated_size_after;
+        self.stats.message_count += 1;
+        
+        // 圧縮結果をキャッシュに保存
+        self.last_sent_states.insert(entity_id, snapshot.clone());
+        
+        // データが削減されたかどうか
+        estimated_size_after < estimated_size_before
+    }
+    
+    /// スナップショットのサイズを推定（簡易実装）
+    fn estimate_snapshot_size(&self, snapshot: &EntitySnapshot) -> usize {
+        let mut size = 8; // ベースサイズ（entity_id + timestamp）
+        
+        for component in &snapshot.components {
+            // コンポーネント名のサイズ
+            size += component.name.len();
+            
+            // フィールドのサイズ
+            for field in &component.fields {
+                size += field.name.len();
+                
+                // 値のサイズ（簡易推定）
+                match &field.value {
+                    serde_json::Value::Null => size += 4,
+                    serde_json::Value::Bool(_) => size += 1,
+                    serde_json::Value::Number(n) => {
+                        if n.is_i64() {
+                            size += 8;
+                        } else {
+                            size += 8; // f64
+                        }
+                    },
+                    serde_json::Value::String(s) => size += s.len(),
+                    serde_json::Value::Array(a) => size += a.len() * 8, // 簡易推定
+                    serde_json::Value::Object(o) => size += o.len() * 16, // 簡易推定
+                }
+            }
+        }
+        
+        size
+    }
+    
+    /// デルタ圧縮を適用（変更がないフィールドを除外）
+    fn apply_delta_compression(&mut self, current: &mut EntitySnapshot, previous: &EntitySnapshot) {
+        for current_comp in &mut current.components {
+            // 前回のスナップショットから同じ名前のコンポーネントを探す
+            if let Some(prev_comp) = previous.components.iter().find(|c| c.name == current_comp.name) {
+                let mut fields_to_remove = Vec::new();
+                
+                // 各フィールドをチェック
+                for (i, field) in current_comp.fields.iter().enumerate() {
+                    // 前回と同じフィールドを探す
+                    if let Some(prev_field) = prev_comp.fields.iter().find(|f| f.name == field.name) {
+                        // 値が同じなら削除対象にする
+                        if field.value == prev_field.value {
+                            fields_to_remove.push(i);
+                            self.stats.delta_skipped_fields += 1;
+                        }
+                    }
+                }
+                
+                // インデックスの大きい順に削除（小さい方から削除するとインデックスがずれる）
+                for i in fields_to_remove.into_iter().rev() {
+                    current_comp.fields.remove(i);
+                }
+            }
+        }
+        
+        // 空になったコンポーネントを削除
+        current.components.retain(|comp| !comp.fields.is_empty());
+    }
+    
+    /// フィールドマスキングを適用（重要でないフィールドを除外）
+    fn apply_field_masking(&mut self, snapshot: &mut EntitySnapshot) {
+        for component in &mut snapshot.components {
+            let mut fields_to_remove = Vec::new();
+            
+            // 各フィールドをチェック（実際の実装ではフィールドの重要度に基づいて判断）
+            for (i, field) in component.fields.iter().enumerate() {
+                // 例：velocity が 0 に近い場合は送信しない
+                if field.name == "velocity_x" || field.name == "velocity_y" || field.name == "velocity_z" {
+                    if let serde_json::Value::Number(n) = &field.value {
+                        if let Some(f) = n.as_f64() {
+                            if f.abs() < 0.01 {
+                                fields_to_remove.push(i);
+                                self.stats.masked_fields += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // インデックスの大きい順に削除
+            for i in fields_to_remove.into_iter().rev() {
+                component.fields.remove(i);
+            }
+        }
+        
+        // 空になったコンポーネントを削除
+        snapshot.components.retain(|comp| !comp.fields.is_empty());
+    }
+    
+    /// 数値の量子化を適用（精度を落として送信量を減らす）
+    fn apply_quantization(&mut self, snapshot: &mut EntitySnapshot) {
+        for component in &mut snapshot.components {
+            for field in &mut component.fields {
+                match &mut field.value {
+                    serde_json::Value::Number(ref mut n) => {
+                        if let Some(f) = n.as_f64() {
+                            // フィールド名に基づいて適切な精度を選択
+                            let precision = if field.name.contains("position") {
+                                self.settings.vector_precision
+                            } else if field.name.contains("rotation") {
+                                self.settings.rotation_precision
+                            } else {
+                                self.settings.float_precision
+                            };
+                            
+                            // 数値を量子化（指定された精度に丸める）
+                            let factor = 10.0_f64.powi(precision as i32);
+                            let quantized = (f * factor).round() / factor;
+                            
+                            // 量子化された値で置き換え
+                            *n = serde_json::Number::from_f64(quantized).unwrap_or_else(|| {
+                                serde_json::Number::from_f64(0.0).unwrap()
+                            });
+                            
+                            self.stats.quantized_values += 1;
+                        }
+                    },
+                    serde_json::Value::Array(ref mut arr) => {
+                        // ベクトルや配列の量子化
+                        for item in arr.iter_mut() {
+                            if let serde_json::Value::Number(ref mut n) = item {
+                                if let Some(f) = n.as_f64() {
+                                    let precision = self.settings.vector_precision;
+                                    let factor = 10.0_f64.powi(precision as i32);
+                                    let quantized = (f * factor).round() / factor;
+                                    
+                                    *n = serde_json::Number::from_f64(quantized).unwrap_or_else(|| {
+                                        serde_json::Number::from_f64(0.0).unwrap()
+                                    });
+                                    
+                                    self.stats.quantized_values += 1;
+                                }
+                            }
+                        }
+                    },
+                    _ => {}
+                }
+            }
+        }
+    }
+    
+    /// 圧縮率を計算
+    pub fn compression_ratio(&self) -> f64 {
+        if self.stats.total_uncompressed_bytes == 0 {
+            return 1.0;
+        }
+        
+        self.stats.total_compressed_bytes as f64 / self.stats.total_uncompressed_bytes as f64
+    }
+    
+    /// 統計情報を取得
+    pub fn get_stats(&self) -> &CompressionStats {
+        &self.stats
+    }
+    
+    /// 統計情報をリセット
+    pub fn reset_stats(&mut self) {
+        self.stats = CompressionStats::default();
+    }
+    
+    /// キャッシュをクリア
+    pub fn clear_cache(&mut self) {
+        self.last_sent_states.clear();
+    }
+    
+    /// エンティティのキャッシュを削除
+    pub fn remove_entity(&mut self, entity_id: u32) {
+        self.last_sent_states.remove(&entity_id);
+    }
+}
+
+/// エンティティのスナップショットを表す構造体
+/// 
+/// ネットワーク上で送信するためのエンティティ状態のスナップショットを表現します。
+/// 圧縮可能な形式でデータを保持します。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntitySnapshot {
+    /// エンティティID
+    pub id: u64,
+    /// スナップショット作成時刻（サーバー時間）
+    pub timestamp: f64,
+    /// 位置データ [x, y, z]
+    pub position: Option<[f32; 3]>,
+    /// 回転データ [x, y, z, w]（クォータニオン）
+    pub rotation: Option<[f32; 4]>,
+    /// 速度データ [x, y, z]
+    pub velocity: Option<[f32; 3]>,
+    /// アニメーション状態
+    pub animation_state: Option<String>,
+    /// その他の追加データ
+    pub extra_data: Option<HashMap<String, serde_json::Value>>,
+}
+
+impl EntitySnapshot {
+    /// 新しいエンティティスナップショットを作成
+    pub fn new(entity_id: u64) -> Self {
+        Self {
+            id: entity_id,
+            timestamp: Date::now(),
+            position: None,
+            rotation: None,
+            velocity: None,
+            animation_state: None,
+            extra_data: None,
+        }
+    }
+    
+    /// タイムスタンプを設定
+    pub fn with_timestamp(mut self, timestamp: f64) -> Self {
+        self.timestamp = timestamp;
+        self
+    }
+    
+    /// 位置を設定
+    pub fn with_position(mut self, position: [f32; 3]) -> Self {
+        self.position = Some(position);
+        self
+    }
+    
+    /// 回転を設定
+    pub fn with_rotation(mut self, rotation: [f32; 4]) -> Self {
+        self.rotation = Some(rotation);
+        self
+    }
+    
+    /// 速度を設定
+    pub fn with_velocity(mut self, velocity: [f32; 3]) -> Self {
+        self.velocity = Some(velocity);
+        self
+    }
+    
+    /// アニメーション状態を設定
+    pub fn with_animation_state(mut self, state: &str) -> Self {
+        self.animation_state = Some(state.to_string());
+        self
+    }
+    
+    /// 追加データを設定
+    pub fn with_extra_data(mut self, data: HashMap<String, serde_json::Value>) -> Self {
+        self.extra_data = Some(data);
+        self
+    }
+    
+    /// 追加データに項目を追加
+    pub fn add_extra_data(&mut self, key: &str, value: serde_json::Value) {
+        if self.extra_data.is_none() {
+            self.extra_data = Some(HashMap::new());
+        }
+        
+        if let Some(extra_data) = &mut self.extra_data {
+            extra_data.insert(key.to_string(), value);
+        }
+    }
+    
+    /// スナップショットをJSONに変換
+    pub fn to_json(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|_| "{}".to_string())
+    }
+    
+    /// JSONからスナップショットを復元
+    pub fn from_json(json: &str) -> Option<Self> {
+        serde_json::from_str(json).ok()
+    }
+    
+    /// スナップショットのバイトサイズを推定
+    pub fn estimate_size(&self) -> usize {
+        // 基本構造の固定サイズ（ID, タイムスタンプ）
+        let mut size = 16; 
+        
+        // 位置データ (12バイト)
+        if self.position.is_some() {
+            size += 12;
+        }
+        
+        // 回転データ (16バイト)
+        if self.rotation.is_some() {
+            size += 16;
+        }
+        
+        // 速度データ (12バイト)
+        if self.velocity.is_some() {
+            size += 12;
+        }
+        
+        // アニメーション状態 (可変長文字列)
+        if let Some(anim) = &self.animation_state {
+            size += anim.len();
+        }
+        
+        // 追加データ (JSONオブジェクト)
+        if let Some(extra) = &self.extra_data {
+            size += serde_json::to_string(extra).unwrap_or_default().len();
+        }
+        
+        size
+    }
+}
+
+/// メッセージ圧縮のためのトレイト
+pub trait MessageCompressor: Send + Sync {
+    /// スナップショットを圧縮
+    fn compress(&self, snapshot: &EntitySnapshot) -> EntitySnapshot;
+    
+    /// 圧縮効率を推定（0.0〜1.0、値が小さいほど効率が良い）
+    fn estimate_efficiency(&self, snapshot: &EntitySnapshot) -> f32;
+}
+
+/// デフォルトのメッセージ圧縮実装
+pub struct DefaultMessageCompressor {
+    /// 位置データの小数点以下の桁数
+    position_precision: u8,
+    /// 回転データの小数点以下の桁数
+    rotation_precision: u8,
+    /// 速度データの小数点以下の桁数
+    velocity_precision: u8,
+}
+
+impl DefaultMessageCompressor {
+    /// 新しいデフォルト圧縮器を作成
+    pub fn new(position_precision: u8, rotation_precision: u8, velocity_precision: u8) -> Self {
+        Self {
+            position_precision,
+            rotation_precision,
+            velocity_precision,
+        }
+    }
+    
+    /// 値を指定した精度に丸める
+    fn round_to_precision(&self, value: f32, precision: u8) -> f32 {
+        if precision == 0 {
+            value.round()
+        } else {
+            let factor = 10.0_f32.powi(precision as i32);
+            (value * factor).round() / factor
+        }
+    }
+}
+
+impl MessageCompressor for DefaultMessageCompressor {
+    fn compress(&self, snapshot: &EntitySnapshot) -> EntitySnapshot {
+        let mut compressed = snapshot.clone();
+        
+        // 位置データを圧縮
+        if let Some(position) = &mut compressed.position {
+            for i in 0..3 {
+                position[i] = self.round_to_precision(position[i], self.position_precision);
+            }
+        }
+        
+        // 回転データを圧縮
+        if let Some(rotation) = &mut compressed.rotation {
+            for i in 0..4 {
+                rotation[i] = self.round_to_precision(rotation[i], self.rotation_precision);
+            }
+        }
+        
+        // 速度データを圧縮
+        if let Some(velocity) = &mut compressed.velocity {
+            for i in 0..3 {
+                velocity[i] = self.round_to_precision(velocity[i], self.velocity_precision);
+            }
+        }
+        
+        compressed
+    }
+    
+    fn estimate_efficiency(&self, snapshot: &EntitySnapshot) -> f32 {
+        let original_size = snapshot.estimate_size();
+        let compressed = self.compress(snapshot);
+        let compressed_size = compressed.estimate_size();
+        
+        if original_size == 0 {
+            return 1.0;
+        }
+        
+        compressed_size as f32 / original_size as f32
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     
     #[test]
-    fn test_component_sync_config() {
-        let config = ComponentSyncConfig::new("Position", SyncPolicy::OnChange)
-            .with_priority(10)
-            .with_interval(50.0)
-            .with_interpolation(true);
+    fn test_entity_snapshot() {
+        let snapshot = EntitySnapshot::new(123)
+            .with_position([1.23456, 2.34567, 3.45678])
+            .with_rotation([0.1234, 0.2345, 0.3456, 0.9876])
+            .with_velocity([10.1234, 20.2345, 30.3456]);
             
-        assert_eq!(config.name, "Position");
-        assert_eq!(config.policy, SyncPolicy::OnChange);
-        assert_eq!(config.priority, 10);
-        assert_eq!(config.interval, 50.0);
-        assert!(config.interpolate);
+        // スナップショットを検証
+        assert_eq!(snapshot.id, 123);
+        assert_eq!(snapshot.position.unwrap()[0], 1.23456);
+        assert_eq!(snapshot.rotation.unwrap()[3], 0.9876);
+        assert_eq!(snapshot.velocity.unwrap()[2], 30.3456);
     }
     
     #[test]
-    fn test_sync_config_default() {
-        let config = SyncConfig::default();
+    fn test_message_compressor() {
+        // 圧縮器を作成（位置は1桁、回転は2桁、速度は0桁）
+        let compressor = DefaultMessageCompressor::new(1, 2, 0);
         
-        assert_eq!(config.sync_interval, 50.0);
-        assert!(config.component_configs.contains_key("Position"));
-        assert!(config.component_configs.contains_key("Velocity"));
-        assert!(config.component_configs.contains_key("Rotation"));
-        assert!(config.component_configs.contains_key("Health"));
+        // テスト用スナップショットを作成
+        let snapshot = EntitySnapshot::new(1)
+            .with_position([1.23456, 2.34567, 3.45678])
+            .with_rotation([0.1234, 0.2345, 0.3456, 0.9876])
+            .with_velocity([10.1234, 20.2345, 30.3456]);
+            
+        // 圧縮を実行
+        let compressed = compressor.compress(&snapshot);
+        
+        // 圧縮結果を検証
+        assert_eq!(compressed.position.unwrap()[0], 1.2);  // 小数点以下1桁
+        assert_eq!(compressed.position.unwrap()[1], 2.3);
+        assert_eq!(compressed.position.unwrap()[2], 3.5);
+        
+        assert_eq!(compressed.rotation.unwrap()[0], 0.12); // 小数点以下2桁
+        assert_eq!(compressed.rotation.unwrap()[1], 0.23);
+        assert_eq!(compressed.rotation.unwrap()[2], 0.35);
+        assert_eq!(compressed.rotation.unwrap()[3], 0.99);
+        
+        assert_eq!(compressed.velocity.unwrap()[0], 10.0); // 小数点以下0桁（整数）
+        assert_eq!(compressed.velocity.unwrap()[1], 20.0);
+        assert_eq!(compressed.velocity.unwrap()[2], 30.0);
+        
+        // 圧縮効率を検証
+        let efficiency = compressor.estimate_efficiency(&snapshot);
+        assert!(efficiency > 0.0 && efficiency <= 1.0);
     }
 } 
