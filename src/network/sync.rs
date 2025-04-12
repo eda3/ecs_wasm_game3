@@ -12,7 +12,7 @@ use crate::ecs::{World, Entity, Component, System, Query, Changed, With, Resourc
 use crate::ecs::{SystemPriority, ResourceManager};
 use crate::ecs::system::SystemPhase;
 
-use super::messages::{EntitySnapshot, ComponentData};
+use super::messages::{EntitySnapshot as MessagesEntitySnapshot, ComponentData};
 use super::client::NetworkComponent;
 use super::protocol::{NetworkMessage, MessageType};
 
@@ -247,8 +247,8 @@ impl SyncSystem {
     }
     
     /// エンティティのスナップショットを作成
-    fn create_entity_snapshot(&self, world: &World, entity: Entity, now: f64) -> EntitySnapshot {
-        let mut snapshot = EntitySnapshot::new(entity.id() as u64, now);
+    fn create_entity_snapshot(&self, world: &World, entity: Entity, now: f64) -> LocalEntitySnapshot {
+        let mut snapshot = LocalEntitySnapshot::new(entity.id() as u64, now);
         
         // 各コンポーネントをスナップショットに追加
         // 実際のゲームでは、コンポーネントの具体的な型と値を取得する必要がある
@@ -280,7 +280,7 @@ impl SyncSystem {
     }
     
     /// エンティティの同期メッセージを送信
-    fn send_entity_sync(&mut self, snapshot: EntitySnapshot) -> usize {
+    fn send_entity_sync(&mut self, snapshot: LocalEntitySnapshot) -> usize {
         // 実際のメッセージ送信は別のシステムで行われるため、
         // ここではバイト数の計算のみを行う
         
@@ -377,7 +377,7 @@ impl System for SyncSystem {
             // 変更がある場合のみ同期
             if !changed_components.is_empty() {
                 // 変更されたコンポーネントのみを含むスナップショットを作成
-                let mut delta_snapshot = EntitySnapshot::new(snapshot.id, now);
+                let mut delta_snapshot = LocalEntitySnapshot::new(snapshot.id, now);
                 
                 for (_, component) in changed_components {
                     delta_snapshot.components.push(component);
@@ -433,7 +433,7 @@ pub struct DefaultMessageCompressor {
     /// 圧縮設定
     settings: CompressionSettings,
     /// エンティティごとの最後に送信した状態
-    last_sent_states: HashMap<u32, EntitySnapshot>,
+    last_sent_states: HashMap<u32, LocalEntitySnapshot>,
     /// 圧縮統計情報
     stats: CompressionStats,
 }
@@ -505,7 +505,7 @@ impl DefaultMessageCompressor {
     }
     
     /// エンティティスナップショットを圧縮
-    pub fn compress_snapshot(&mut self, snapshot: &mut EntitySnapshot) -> bool {
+    pub fn compress_snapshot(&mut self, snapshot: &mut LocalEntitySnapshot) -> bool {
         let entity_id = snapshot.id;
         let had_previous = self.last_sent_states.contains_key(&(entity_id as u32));
         
@@ -547,7 +547,7 @@ impl DefaultMessageCompressor {
     }
     
     /// スナップショットのサイズを推定（簡易実装）
-    fn estimate_snapshot_size(&self, snapshot: &EntitySnapshot) -> usize {
+    fn estimate_snapshot_size(&self, snapshot: &LocalEntitySnapshot) -> usize {
         let mut size = 8; // ベースサイズ（entity_id + timestamp）
         
         // 各フィールドのサイズを加算
@@ -597,7 +597,7 @@ impl DefaultMessageCompressor {
     }
     
     /// デルタ圧縮を適用（変更がないフィールドを除外）
-    fn apply_delta_compression(&mut self, current: &mut EntitySnapshot, previous: &EntitySnapshot) {
+    fn apply_delta_compression(&mut self, current: &mut LocalEntitySnapshot, previous: &LocalEntitySnapshot) {
         // 各フィールドを比較し、変更がなければOptionalをNoneに設定
         if current.position == previous.position {
             current.position = None;
@@ -620,7 +620,7 @@ impl DefaultMessageCompressor {
     }
     
     /// フィールドマスキングを適用（重要でないフィールドを除外）
-    fn apply_field_masking(&mut self, snapshot: &mut EntitySnapshot) {
+    fn apply_field_masking(&mut self, snapshot: &mut LocalEntitySnapshot) {
         // 速度が小さい場合は省略
         if let Some(velocity) = &snapshot.velocity {
             if velocity.iter().all(|v| v.abs() < 0.01) {
@@ -635,7 +635,7 @@ impl DefaultMessageCompressor {
     }
     
     /// 浮動小数点の量子化を適用
-    fn apply_quantization(&mut self, snapshot: &mut EntitySnapshot) {
+    fn apply_quantization(&mut self, snapshot: &mut LocalEntitySnapshot) {
         // 位置データの量子化
         if let Some(position) = &mut snapshot.position {
             for i in 0..position.len() {
@@ -691,14 +691,14 @@ impl DefaultMessageCompressor {
 /// メッセージ圧縮のトレイト
 pub trait MessageCompressor: Send + Sync {
     /// スナップショットを圧縮
-    fn compress(&self, snapshot: &EntitySnapshot) -> EntitySnapshot;
+    fn compress(&self, snapshot: &LocalEntitySnapshot) -> LocalEntitySnapshot;
     
     /// 圧縮効率を推定（0.0〜1.0、値が小さいほど効率が良い）
-    fn estimate_efficiency(&self, snapshot: &EntitySnapshot) -> f32;
+    fn estimate_efficiency(&self, snapshot: &LocalEntitySnapshot) -> f32;
 }
 
 impl MessageCompressor for DefaultMessageCompressor {
-    fn compress(&self, snapshot: &EntitySnapshot) -> EntitySnapshot {
+    fn compress(&self, snapshot: &LocalEntitySnapshot) -> LocalEntitySnapshot {
         // 実装されたcompressメソッド
         let mut compressed = snapshot.clone();
         // 圧縮処理を行う
@@ -706,7 +706,7 @@ impl MessageCompressor for DefaultMessageCompressor {
         compressed
     }
     
-    fn estimate_efficiency(&self, snapshot: &EntitySnapshot) -> f32 {
+    fn estimate_efficiency(&self, snapshot: &LocalEntitySnapshot) -> f32 {
         // 圧縮効率を推定
         // 簡易実装
         0.5
@@ -718,7 +718,7 @@ impl MessageCompressor for DefaultMessageCompressor {
 /// ネットワーク上で送信するためのエンティティ状態のスナップショットを表現します。
 /// 圧縮可能な形式でデータを保持します。
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EntitySnapshot {
+pub struct LocalEntitySnapshot {
     /// エンティティID
     pub id: u64,
     /// スナップショット作成時刻（サーバー時間）
@@ -737,7 +737,7 @@ pub struct EntitySnapshot {
     pub components: Vec<ComponentData>,
 }
 
-impl EntitySnapshot {
+impl LocalEntitySnapshot {
     /// 新しいエンティティスナップショットを作成
     pub fn new(entity_id: u64, timestamp: f64) -> Self {
         Self {
@@ -859,7 +859,7 @@ mod tests {
     
     #[test]
     fn test_entity_snapshot() {
-        let snapshot = EntitySnapshot::new(123, Date::now())
+        let snapshot = LocalEntitySnapshot::new(123, Date::now())
             .with_position([1.23456, 2.34567, 3.45678])
             .with_rotation([0.1234, 0.2345, 0.3456, 0.9876])
             .with_velocity([10.1234, 20.2345, 30.3456]);
@@ -877,7 +877,7 @@ mod tests {
         let compressor = DefaultMessageCompressor::new();
         
         // テスト用スナップショットを作成
-        let snapshot = EntitySnapshot::new(1, Date::now())
+        let snapshot = LocalEntitySnapshot::new(1, Date::now())
             .with_position([1.23456, 2.34567, 3.45678])
             .with_rotation([0.1234, 0.2345, 0.3456, 0.9876])
             .with_velocity([10.1234, 20.2345, 30.3456]);
