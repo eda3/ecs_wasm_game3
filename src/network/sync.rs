@@ -10,6 +10,7 @@ use serde::{Serialize, Deserialize};
 use wasm_bindgen::JsValue;
 use crate::ecs::{World, Entity, Component, System, Query, Changed, With, Resource};
 use crate::ecs::{SystemPriority, ResourceManager};
+use crate::ecs::system::SystemPhase;
 
 use super::messages::{EntitySnapshot, ComponentData};
 use super::client::NetworkComponent;
