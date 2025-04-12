@@ -2,6 +2,7 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use crate::ecs::{Component, ComponentManager, Entity, Resource, World};
+use crate::ecs::resource::ResourceManager;
 use wasm_bindgen::JsValue;
 
 /// システムの実行フェーズ

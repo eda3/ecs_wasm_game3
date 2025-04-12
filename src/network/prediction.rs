@@ -15,7 +15,7 @@ use super::messages::{InputData, EntitySnapshot, ComponentData};
 use super::client::NetworkComponent;
 use super::network_status::{NetworkStatus, BandwidthStatus};
 use super::sync::{PositionComponent, VelocityComponent};
-use crate::ecs::{World, Entity, Component, System, Query, With, Changed, Resource, ResourceManager};
+use crate::ecs::{World, Entity, Component, System, Query, With, Changed, ResourceManager};
 use crate::ecs::system::{SystemPhase, SystemPriority};
 
 /// クライアント予測データ
