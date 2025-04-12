@@ -373,8 +373,7 @@ impl System for SyncSystem {
             // 変更がある場合のみ同期
             if !changed_components.is_empty() {
                 // 変更されたコンポーネントのみを含むスナップショットを作成
-                let mut delta_snapshot = EntitySnapshot::new(snapshot.id);
-                delta_snapshot.timestamp = now;
+                let mut delta_snapshot = EntitySnapshot::new(snapshot.id, now);
                 
                 for (_, component) in changed_components {
                     delta_snapshot.components.push(component);
