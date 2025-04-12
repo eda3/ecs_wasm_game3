@@ -804,7 +804,19 @@ impl Default for InterpolationSystem {
 }
 
 impl System for InterpolationSystem {
-    fn run(&mut self, world: &mut World, delta_time: f32) {
+    fn name(&self) -> &'static str {
+        "InterpolationSystem"
+    }
+
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Update
+    }
+
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(10) // 適切な優先度を設定
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let elapsed = now - self.last_update;
         self.last_update = now;
@@ -818,6 +830,8 @@ impl System for InterpolationSystem {
             // 補間時間（現在時刻 - バッファ時間）に基づいて、適切なスナップショットを選択
             // 選択したスナップショット間で線形補間を行い、滑らかな動きを実現
         }
+        
+        Ok(())
     }
 }
 
