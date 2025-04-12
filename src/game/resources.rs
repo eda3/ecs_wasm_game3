@@ -2,10 +2,7 @@
 //! 
 //! ゲームで使用する共有リソースを管理します。
 
-use wasm_bindgen::prelude::*;
 use crate::ecs::Resource;
-use std::sync::Arc;
-use wasm_bindgen::JsValue;
 
 /// ゲーム設定リソース
 /// 

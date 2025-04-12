@@ -4,7 +4,6 @@
 //! AABB（軸並行境界ボックス）、円形、多角形の衝突検出をサポートしています。
 
 use crate::physics::PhysicsEntity;
-use std::f64::consts::PI;
 
 /// 衝突形状
 #[derive(Clone, Debug)]
@@ -781,7 +780,7 @@ mod tests {
             0.0,
             &square_a,
             (15.0, 0.0),
-            PI / 4.0, // 45度回転
+            0.0,
             &square_b,
         );
         

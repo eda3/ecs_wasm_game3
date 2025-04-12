@@ -3,7 +3,6 @@
 //! ゲームのスプライトシステムを管理します。
 //! スプライトの描画やアニメーションを制御します。
 
-use wasm_bindgen::prelude::*;
 use web_sys::HtmlImageElement;
 use std::collections::HashMap;
 

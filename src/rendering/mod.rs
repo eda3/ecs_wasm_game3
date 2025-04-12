@@ -14,7 +14,7 @@ pub use camera::*;
 pub use layer::*;
 
 use wasm_bindgen::prelude::*;
-use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement, Element};
+use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use std::collections::HashMap;
 use std::time::Duration;
 

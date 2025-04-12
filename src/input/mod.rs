@@ -9,13 +9,12 @@ use std::time::{Duration, Instant};
 use wasm_bindgen::prelude::*;
 use web_sys::KeyboardEvent;
 
-use crate::ecs::{Component, Entity, System, World};
+use crate::ecs::{Entity, System, World};
 
 pub mod key_codes;
 pub mod gestures;
 
 pub use key_codes::*;
-pub use gestures::*;
 
 /// キーボードのキーコード用の型エイリアス
 pub type KeyCode = u32;

@@ -27,7 +27,6 @@ pub use component::{Component, ComponentManager};
 pub use system::{System, SystemPhase, SystemPriority, SystemProcessor};
 pub use resource::{Resource, ResourceManager};
 pub use query::{Query, Changed, With};
-pub use macros::*;
 
 #[macro_use]
 pub mod prelude {

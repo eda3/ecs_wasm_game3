@@ -3,8 +3,7 @@
 //! このモジュールは、タッチスクリーンジェスチャーの検出と処理を担当します。
 //! タップ、スワイプ、ピンチ、回転などのジェスチャーを検出します。
 
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 /// ジェスチャータイプの列挙型
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
