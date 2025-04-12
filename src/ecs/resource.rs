@@ -71,12 +71,12 @@ impl ResourceManager {
     /// リソースを削除
     pub fn remove<T: Resource>(&mut self) -> Option<T> {
         let type_id = TypeId::of::<T>();
-        self.resources.remove(&type_id).map(|r| {
-            let boxed = Box::new(r);
-            let any_box = boxed.as_any();
-            match any_box.downcast::<T>() {
-                Ok(typed_box) => *typed_box,
-                Err(_) => panic!("Failed to downcast resource when removing it")
+        self.resources.remove(&type_id).map(|boxed_resource| {
+            // Box<dyn Resource>からBox<T>に変換
+            let raw_ptr = Box::into_raw(boxed_resource);
+            unsafe {
+                // rawポインタをBox<T>にキャストして所有権を取り戻す
+                *Box::from_raw(raw_ptr as *mut T)
             }
         })
     }
