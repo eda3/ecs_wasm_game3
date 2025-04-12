@@ -5,6 +5,8 @@
 
 use std::collections::HashMap;
 
+use crate::ecs::{World, Resource};
+
 pub mod collision;
 pub mod dynamics;
 pub mod optimization;
@@ -12,6 +14,16 @@ pub mod optimization;
 pub use collision::{detect_collision, Collision, CollisionShape};
 pub use dynamics::{apply_force, apply_gravity, apply_impulse, apply_torque, integrate, resolve_collision};
 pub use optimization::{CollisionFilter, PhysicsStep, SpatialGrid, generate_collision_pairs};
+
+/// 物理システムを初期化
+pub fn init_physics_system(world: &mut World) {
+    // 物理ワールドを作成してリソースとして登録
+    let physics_world = PhysicsWorld::new();
+    world.insert_resource(physics_world);
+    
+    // TODO: 必要に応じて物理システムを登録
+    // world.register_system(PhysicsSystem::new());
+}
 
 /// 物理エンティティ
 pub struct PhysicsEntity {

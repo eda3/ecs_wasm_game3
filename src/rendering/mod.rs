@@ -18,6 +18,20 @@ use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use std::collections::HashMap;
 use std::time::Duration;
 
+/// レンダリングシステムを初期化
+pub fn init_rendering_system(world: &mut crate::ecs::World, canvas_id: &str) -> Result<(), JsValue> {
+    // レンダラーの初期化
+    let renderer = Renderer::new(canvas_id)?;
+    
+    // レンダリングリソースをワールドに追加
+    world.insert_resource(renderer);
+    
+    // TODO: 必要に応じてレンダリングシステムを登録
+    // world.register_system(RenderingSystem::new());
+    
+    Ok(())
+}
+
 /// レンダラー構造体
 /// 
 /// キャンバスとコンテキストを管理し、描画コマンドを実行します。
