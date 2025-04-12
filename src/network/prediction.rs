@@ -212,7 +212,7 @@ impl System for ServerReconciliation {
         SystemPriority::new(50) // 中程度の優先度
     }
     
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), String> {
         // 現在の時刻を取得
         let now = Date::now();
         self.last_update = now;
@@ -221,14 +221,18 @@ impl System for ServerReconciliation {
         let owned_entities = self.get_client_owned_entities(world);
         
         // ネットワーク送信キューを取得
-        let send_queue = match resources.get_mut::<NetworkSendQueue>() {
-            Some(queue) => queue,
+        let mut send_queue_opt = resources.get_mut::<NetworkSendQueue>();
+        let send_queue = match send_queue_opt {
+            Some(ref mut queue) => queue,
             None => {
                 #[cfg(feature = "debug_network")]
                 web_sys::console::log_1(&"エラー: NetworkSendQueueが見つかりません。修正を送信できません。".into());
                 return Ok(());
             }
         };
+        
+        // ネットワーク状態を確認
+        let network_status_opt = resources.get::<NetworkStatus>();
         
         // 各クライアント所有のエンティティに対して処理
         for (client_id, entity) in owned_entities {
@@ -278,9 +282,10 @@ impl System for ServerReconciliation {
                     let mut optimized_snapshot = snapshot.clone();
                     
                     // ネットワーク状態を確認
-                    if let Some(network_status) = resources.get::<NetworkStatus>() {
-                        if network_status.quality == NetworkQuality::Poor || 
-                           network_status.quality == NetworkQuality::Bad {
+                    if let Some(network_status) = network_status_opt {
+                        if network_status.bandwidth_status == BandwidthStatus::Limited || 
+                           network_status.bandwidth_status == BandwidthStatus::Critical {
+                            // 限られた帯域幅に対してスナップショットを最適化
                             self.optimize_snapshot_for_poor_network(&mut optimized_snapshot);
                         }
                     }
@@ -288,9 +293,10 @@ impl System for ServerReconciliation {
                     // 修正データをキューに追加
                     #[cfg(feature = "debug_network")]
                     web_sys::console::log_1(&format!("ServerReconciliation: クライアント {} のエンティティ {} に修正を送信 (seq: {})",
-                        client_id, entity.id(), last_sequence).into());
+                        client_id, entity.id().0, last_sequence).into());
                     
-                    self.queue_snapshot_for_client(send_queue, client_id, entity, optimized_snapshot, last_sequence);
+                    // 修正スナップショットを送信キューに追加
+                    send_queue.queue_snapshot(client_id, entity, optimized_snapshot, last_sequence);
                     
                     // いくつかの主要コンポーネントについて、予測精度の分析を行う
                     if let (Some(initial_pos), Some(final_pos)) = (
@@ -300,6 +306,15 @@ impl System for ServerReconciliation {
                         // 位置の差異を計算して分析
                         let difference = self.calculate_component_difference("position", initial_pos, final_pos);
                         self.analyze_prediction_accuracy(client_id, "position", difference);
+                    }
+                    
+                    // 速度の予測精度も分析
+                    if let (Some(initial_vel), Some(final_vel)) = (
+                        initial_state.get("velocity"),
+                        final_state.get("velocity")
+                    ) {
+                        let difference = self.calculate_component_difference("velocity", initial_vel, final_vel);
+                        self.analyze_prediction_accuracy(client_id, "velocity", difference);
                     }
                 }
             }
@@ -349,24 +364,17 @@ impl ServerReconciliation {
     fn get_client_owned_entities(&self, world: &World) -> Vec<(u32, Entity)> {
         let mut owned_entities = Vec::new();
         
-        // このメソッドの実際の実装はEntityやComponentのイテレーション機能に依存します
-        // 以下は簡略化したバージョン
+        // ECSクエリ機能を使用して、NetworkComponentを持つエンティティを検索
+        let entities = world.query_entities::<NetworkComponent>();
         
-        // 実際のプロジェクトでは、worldからNetworkComponentを持つエンティティを
-        // クエリして、owner_idフィールドに基づいてフィルタリングします
-        
-        // 例示的なコード
-        // for (entity, network_comp) in query::<(Entity, &NetworkComponent)>().iter(world) {
-        //    if let Some(owner_id) = network_comp.owner_id {
-        //        owned_entities.push((owner_id, entity));
-        //    }
-        // }
-        
-        // ここでは、テスト目的での実装を示します
-        #[cfg(feature = "debug_network")]
-        web_sys::console::log_1(&"エンティティ所有権クエリは簡略化されています".into());
-        
-        // TODO: 実際のECSクエリ実装でこれを置き換える
+        for entity in entities {
+            if let Some(network_comp) = world.get_component::<NetworkComponent>(entity) {
+                if let Some(owner_id) = network_comp.owner_id {
+                    // クライアント所有のエンティティを追加
+                    owned_entities.push((owner_id, entity));
+                }
+            }
+        }
         
         owned_entities
     }
@@ -374,9 +382,6 @@ impl ServerReconciliation {
     /// エンティティの状態をキャプチャ
     fn capture_entity_state(&self, world: &World, entity: Entity) -> HashMap<String, ComponentData> {
         let mut components = HashMap::new();
-        
-        // このメソッドも、実際のコンポーネントシステムに依存します
-        // 以下は簡略化したコード例
         
         // 位置コンポーネントを取得（存在する場合）
         if let Some(position) = world.get_component::<PositionComponent>(entity) {
@@ -396,7 +401,9 @@ impl ServerReconciliation {
             });
         }
         
-        // 注意: 実際には、同期が必要な他のコンポーネントも取得する必要があります
+        // その他の同期が必要なコンポーネントを追加
+        // ここではゲーム固有のコンポーネントを追加する
+        // 例: 回転、状態、体力など
         
         components
     }
@@ -404,44 +411,70 @@ impl ServerReconciliation {
     /// 入力をエンティティに適用
     fn apply_input_to_entity(&self, world: &mut World, entity: Entity, input: &InputData, delta_time: f32) {
         // 入力を基にエンティティのコンポーネントを更新
-        // 例: 位置と速度の更新
         
+        // 位置と速度の更新処理
         if let Some(mut position) = world.get_component_mut::<PositionComponent>(entity) {
             if let Some(mut velocity) = world.get_component_mut::<VelocityComponent>(entity) {
                 // 入力に基づいて速度を更新
-                // 例えば、移動入力に基づいてvelocityを設定
-                let (move_x, move_y) = input.movement.unwrap_or((0.0, 0.0));
-                let speed = 5.0; // 適切なスピード係数
-                
-                velocity.x = move_x * speed;
-                velocity.y = move_y * speed;
-                
-                // 速度に基づいて位置を更新
-                position.x += velocity.x * delta_time;
-                position.y += velocity.y * delta_time;
-                
-                // 必要に応じてZ軸も更新
-                if let (Some(vel_z), Some(pos_z)) = (velocity.z, position.z.as_mut()) {
-                    *pos_z += vel_z * delta_time;
+                if let Some((move_x, move_y)) = input.movement {
+                    let speed = 5.0; // 適切なスピード係数（ゲームバランスに応じて調整）
+                    
+                    // 速度を設定
+                    velocity.x = move_x * speed;
+                    velocity.y = move_y * speed;
+                    
+                    // 速度に基づいて位置を更新
+                    position.x += velocity.x * delta_time;
+                    position.y += velocity.y * delta_time;
+                    
+                    // Z軸の処理（必要な場合）
+                    if let Some(vel_z) = velocity.z {
+                        // Z位置を更新
+                        position.z += vel_z * delta_time;
+                        
+                        // 重力など物理シミュレーションの適用（例）
+                        if position.z > 0.0 {
+                            velocity.z = Some(vel_z - 9.8 * delta_time); // 重力加速度
+                        } else if position.z < 0.0 {
+                            // 地面にいる場合
+                            position.z = 0.0;
+                            velocity.z = Some(0.0);
+                        }
+                    }
                 }
             }
         }
         
-        // アクション入力の処理（例：ジャンプ、攻撃など）
+        // アクション入力の処理
         for (action_name, is_active) in &input.actions {
             if *is_active {
-                // 各アクションタイプに対応する処理を実行
+                // 各アクションタイプに対応する処理
                 match action_name.as_str() {
                     "jump" => {
                         // ジャンプ処理
                         if let Some(mut velocity) = world.get_component_mut::<VelocityComponent>(entity) {
-                            if let Some(pos_z) = velocity.z.as_mut() {
-                                *pos_z = 10.0; // ジャンプ力
+                            // ジャンプは地面にいる場合のみ有効
+                            if let Some(position) = world.get_component::<PositionComponent>(entity) {
+                                if position.z <= 0.01 { // 地面に近い
+                                    velocity.z = Some(10.0); // ジャンプ力
+                                }
                             }
                         }
                     },
-                    // 他のアクションタイプを追加
-                    _ => {}
+                    "attack" => {
+                        // 攻撃処理
+                        // 実際のゲームロジックに応じて実装
+                    },
+                    "use" => {
+                        // アイテム使用処理
+                        // 実際のゲームロジックに応じて実装
+                    },
+                    // その他のアクションタイプを追加
+                    _ => {
+                        // 未知のアクションは無視
+                        #[cfg(feature = "debug_network")]
+                        web_sys::console::log_1(&format!("未知のアクション: {}", action_name).into());
+                    }
                 }
             }
         }
@@ -454,12 +487,13 @@ impl ServerReconciliation {
         final_state: &HashMap<String, ComponentData>,
     ) -> bool {
         // 主要なコンポーネントについて、重要な違いがあるかをチェック
+        
         // 位置の大きな変化があるか
         let position_diff = self.has_significant_difference(
             "position",
             initial_state,
             final_state,
-            0.5 // 位置の閾値（単位はゲーム内単位）
+            self.correction_threshold // 位置の閾値（ゲーム内単位）
         );
         
         // 速度の大きな変化があるか
@@ -467,68 +501,14 @@ impl ServerReconciliation {
             "velocity",
             initial_state,
             final_state,
-            1.0 // 速度の閾値
+            self.correction_threshold * 2.0 // 速度の閾値は位置より大きめに
         );
         
         // その他の重要なコンポーネントの変化...
+        // ゲーム固有のロジックに応じて追加
         
         // 少なくとも1つの重要な変化があれば修正を送信
         position_diff || velocity_diff
-    }
-    
-    /// エンティティのスナップショットを作成
-    fn create_entity_snapshot(&self, world: &World, entity: Entity, timestamp: f64) -> EntitySnapshot {
-        let mut snapshot = EntitySnapshot::new(entity.id().0);
-        snapshot.timestamp = timestamp;
-        
-        // 必要なコンポーネントデータを取得して追加
-        if let Some(position) = world.get_component::<PositionComponent>(entity) {
-            snapshot.position = Some([position.x, position.y, position.z]);
-        }
-        
-        if let Some(velocity) = world.get_component::<VelocityComponent>(entity) {
-            snapshot.velocity = Some([velocity.x, velocity.y, velocity.z]);
-        }
-        
-        // 他のコンポーネントも必要に応じて追加
-        
-        snapshot
-    }
-    
-    /// 貧弱なネットワーク向けにスナップショットを最適化
-    fn optimize_snapshot_for_poor_network(&self, snapshot: &mut EntitySnapshot) {
-        // 帯域幅を節約するために、重要度の低いコンポーネントを除外
-        let important_components = ["position", "velocity", "health"];
-        
-        // 重要でないコンポーネントを特定
-        let components_to_remove: Vec<String> = snapshot.components.keys()
-            .filter(|k| !important_components.contains(&k.as_str()))
-            .cloned()
-            .collect();
-        
-        // 重要でないコンポーネントを削除
-        for key in components_to_remove {
-            snapshot.components.remove(&key);
-        }
-        
-        // 少数の精度を下げる（浮動小数点の精度を下げることでサイズを小さくする）
-        // 位置の精度を下げる
-        if let Some(ComponentData::Position { x, y, z }) = snapshot.components.get_mut("position") {
-            *x = (*x * 10.0).round() / 10.0; // 小数第一位まで
-            *y = (*y * 10.0).round() / 10.0;
-            if let Some(ref mut z_val) = z {
-                *z_val = (*z_val * 10.0).round() / 10.0;
-            }
-        }
-        
-        // 速度の精度を下げる
-        if let Some(ComponentData::Velocity { x, y, z }) = snapshot.components.get_mut("velocity") {
-            *x = (*x * 10.0).round() / 10.0;
-            *y = (*y * 10.0).round() / 10.0;
-            if let Some(ref mut z_val) = z {
-                *z_val = (*z_val * 10.0).round() / 10.0;
-            }
-        }
     }
     
     /// コンポーネントの違いが閾値を超えているかチェック
@@ -583,8 +563,81 @@ impl ServerReconciliation {
                     difference > threshold
                 }
             },
-            // 他のコンポーネントタイプに対する比較ロジックを追加
-            _ => false, // サポートされていないコンポーネントタイプは無視
+            // その他のコンポーネントタイプの比較
+            // 例: 回転、状態、体力など
+            _ => false, // サポートされていないコンポーネントタイプ
+        }
+    }
+    
+    /// エンティティのスナップショットを作成
+    fn create_entity_snapshot(&self, world: &World, entity: Entity, timestamp: f64) -> EntitySnapshot {
+        // 新しいスナップショットを作成
+        let mut snapshot = EntitySnapshot::new(entity.id().0);
+        snapshot.timestamp = timestamp;
+        
+        // コンポーネントデータを収集
+        let mut components = HashMap::new();
+        
+        // 位置コンポーネント
+        if let Some(position) = world.get_component::<PositionComponent>(entity) {
+            components.insert("position".to_string(), ComponentData::Position {
+                x: position.x,
+                y: position.y,
+                z: position.z,
+            });
+        }
+        
+        // 速度コンポーネント
+        if let Some(velocity) = world.get_component::<VelocityComponent>(entity) {
+            components.insert("velocity".to_string(), ComponentData::Velocity {
+                x: velocity.x,
+                y: velocity.y,
+                z: velocity.z,
+            });
+        }
+        
+        // その他の必要なコンポーネント
+        // ゲーム固有のコンポーネントを追加
+        
+        // スナップショットにコンポーネントを設定
+        snapshot.components = components;
+        
+        snapshot
+    }
+    
+    /// 貧弱なネットワーク向けにスナップショットを最適化
+    fn optimize_snapshot_for_poor_network(&self, snapshot: &mut EntitySnapshot) {
+        // 重要なコンポーネント（常に送信する必要があるもの）
+        let important_components = ["position", "velocity", "health"];
+        
+        // 非重要なコンポーネントを除外
+        let components_to_remove: Vec<String> = snapshot.components.keys()
+            .filter(|k| !important_components.contains(&k.as_str()))
+            .cloned()
+            .collect();
+        
+        // 非重要なコンポーネントを削除
+        for key in components_to_remove {
+            snapshot.components.remove(&key);
+        }
+        
+        // 数値の精度を下げて帯域幅を節約
+        // 位置コンポーネントの精度を下げる
+        if let Some(ComponentData::Position { x, y, z }) = snapshot.components.get_mut("position") {
+            *x = (*x * 10.0).round() / 10.0; // 小数第一位までの精度
+            *y = (*y * 10.0).round() / 10.0;
+            if let Some(ref mut z_val) = z {
+                *z_val = (*z_val * 10.0).round() / 10.0;
+            }
+        }
+        
+        // 速度コンポーネントの精度を下げる
+        if let Some(ComponentData::Velocity { x, y, z }) = snapshot.components.get_mut("velocity") {
+            *x = (*x * 10.0).round() / 10.0;
+            *y = (*y * 10.0).round() / 10.0;
+            if let Some(ref mut z_val) = z {
+                *z_val = (*z_val * 10.0).round() / 10.0;
+            }
         }
     }
     
@@ -643,65 +696,6 @@ impl ServerReconciliation {
             while inputs.len() > self.max_steps_per_frame * 2 {
                 inputs.pop_front();
             }
-        }
-    }
-    
-    /// クライアント所有のエンティティかどうかを確認
-    fn is_client_owned(&self, world: &World, entity: Entity, client_id: u32) -> bool {
-        if let Some(network_comp) = world.get_component::<NetworkComponent>(entity) {
-            network_comp.owner_id == Some(client_id)
-        } else {
-            false
-        }
-    }
-    
-    fn queue_snapshot_for_client(&self, send_queue: &mut NetworkSendQueue, client_id: u32, entity: Entity, snapshot: EntitySnapshot, sequence: u32) {
-        // エンティティスナップショットをネットワークメッセージに変換
-        let message = NetworkMessage::new(MessageType::ComponentUpdate)
-            .with_sequence(sequence)
-            .with_entity_id(snapshot.id as u32)
-            .with_timestamp(snapshot.timestamp);
-        
-        // 送信キューに追加
-        send_queue.queue_message(client_id, message);
-    }
-    
-    /// 入力に応じて運動量を計算する
-    fn calculate_momentum(&self, input1: &InputData, input2: &InputData, input3: &InputData) -> (f32, f32) {
-        // 各入力の移動ベクトルを取得
-        let m1 = input1.movement.unwrap_or((0.0, 0.0));
-        let m2 = input2.movement.unwrap_or((0.0, 0.0));
-        let m3 = input3.movement.unwrap_or((0.0, 0.0));
-        
-        // 3つの入力の平均を計算
-        let avg_x = (m1.0 + m2.0 + m3.0) / 3.0;
-        let avg_y = (m1.1 + m2.1 + m3.1) / 3.0;
-        
-        (avg_x, avg_y)
-    }
-    
-    /// 2つの入力から方向を予測
-    fn predict_direction(&self, input1: &InputData, input2: &InputData) -> (f32, f32) {
-        let m1 = input1.movement.unwrap_or((0.0, 0.0));
-        let m2 = input2.movement.unwrap_or((0.0, 0.0));
-        
-        // 線形予測（単純な次の値の予測）
-        let predicted_x = m2.0 + (m2.0 - m1.0);
-        let predicted_y = m2.1 + (m2.1 - m1.1);
-        
-        (predicted_x, predicted_y)
-    }
-    
-    /// 入力を適用する
-    fn apply_input(&self, world: &mut World, entity: Entity, input: &InputData, delta_time: f32) -> bool {
-        let input_processor = world.get_component_mut::<InputProcessor>(entity);
-        
-        if let Some(mut processor) = input_processor {
-            // 実際の入力処理はゲームの実装に依存
-            processor.process_input(input, delta_time);
-            true
-        } else {
-            false
         }
     }
 }
@@ -936,6 +930,18 @@ impl PredictionSystem {
 }
 
 impl System for PredictionSystem {
+    fn name(&self) -> &'static str {
+        "PredictionSystem"
+    }
+
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::Network
+    }
+
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Update
+    }
+
     fn run(&mut self, world: &mut World, delta_time: f32) {
         if self.is_server {
             // サーバーモードでの処理

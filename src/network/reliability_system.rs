@@ -1,12 +1,12 @@
 impl System for NetworkReliabilitySystem {
-    fn name(&self) -> &str {
+    fn name(&self) -> &'static str {
         "NetworkReliabilitySystem"
     }
     
-    fn run(&mut self, world: &mut World, resources: &mut Resources) {
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         if let Some(network) = resources.get_mut::<NetworkResource>() {
             if !matches!(network.state, ConnectionState::Connected) {
-                return; // 接続されていない場合は処理しない
+                return Ok(()); // 接続されていない場合は処理しない
             }
             
             let current_time = js_sys::Date::now();
@@ -20,13 +20,16 @@ impl System for NetworkReliabilitySystem {
             // ネットワーク品質測定の更新
             self.update_network_metrics(network);
         }
+        
+        Ok(())
     }
 
     fn phase(&self) -> crate::ecs::SystemPhase {
-        crate::ecs::SystemPhase::Network
+        crate::ecs::SystemPhase::Update
     }
 
-    fn priority(&self) -> i32 {
-        -10 // 高優先度（先に実行）
+    fn priority(&self) -> SystemPriority {
+        // 高優先度（先に実行）
+        SystemPriority::new(10)
     }
 } 
