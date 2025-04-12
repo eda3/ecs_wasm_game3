@@ -51,14 +51,22 @@ pub trait System: 'static + Send + Sync {
 }
 
 /// システムプロセッサー
+/// システムの登録と実行を管理する
 pub struct SystemProcessor {
+    /// フェーズごとのシステムリスト
+    systems: HashMap<SystemPhase, Vec<Box<dyn System>>>,
+    /// リソースのマップ
+    resources: HashMap<TypeId, Box<dyn Any>>,
+    /// コンポーネント管理
     component_manager: ComponentManager,
 }
 
 impl SystemProcessor {
-    /// 新しいシステムプロセッサーを作成
+    /// 新しいシステムプロセッサを作成
     pub fn new() -> Self {
         Self {
+            systems: HashMap::new(),
+            resources: HashMap::new(),
             component_manager: ComponentManager::new(),
         }
     }
@@ -91,25 +99,6 @@ impl SystemProcessor {
     /// コンポーネントを削除
     pub fn remove_component<T: Component>(&mut self, entity: Entity) -> bool {
         self.component_manager.remove_component::<T>(entity)
-    }
-}
-
-/// システムプロセッサ
-/// システムの登録と実行を管理する
-pub struct SystemProcessor {
-    /// フェーズごとのシステムリスト
-    systems: HashMap<SystemPhase, Vec<Box<dyn System>>>,
-    /// リソースのマップ
-    resources: HashMap<TypeId, Box<dyn Any>>,
-}
-
-impl SystemProcessor {
-    /// 新しいシステムプロセッサを作成
-    pub fn new() -> Self {
-        Self {
-            systems: HashMap::new(),
-            resources: HashMap::new(),
-        }
     }
 
     /// システムを登録
