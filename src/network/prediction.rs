@@ -8,6 +8,7 @@ use js_sys::Date;
 use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::sync::{Arc, Mutex};
 
 use super::messages::{InputData, EntitySnapshot, ComponentData};
 use super::client::NetworkComponent;
@@ -963,23 +964,24 @@ impl System for PredictionSystem {
     }
 
     fn priority(&self) -> SystemPriority {
-        SystemPriority::Network
+        SystemPriority::new(10) // ネットワーク関連のため高い優先度
     }
 
     fn phase(&self) -> SystemPhase {
         SystemPhase::Update
     }
 
-    fn run(&mut self, world: &mut World, delta_time: f32) {
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         if self.is_server {
             // サーバーモードでの処理
-            self.server_reconciliation.run(world, delta_time);
-            self.entity_sync.run(world, delta_time);
+            self.server_reconciliation.run(world, resources, delta_time)?;
+            self.entity_sync.run(world, resources, delta_time)?;
         } else {
             // クライアントモードでの処理
-            self.client_prediction.run(world, delta_time);
-            self.interpolation.run(world, delta_time);
+            self.client_prediction.run(world, resources, delta_time)?;
+            self.interpolation.run(world, resources, delta_time)?;
         }
+        Ok(())
     }
 }
 
@@ -991,7 +993,7 @@ pub struct InputLatencyCompensationSystem {
     /// 入力バッファ
     input_buffer: VecDeque<InputData>,
     /// ネットワーク品質モニタ
-    network_monitor: Option<Rc<RefCell<NetworkQualityMonitor>>>,
+    network_monitor: Option<Arc<Mutex<NetworkQualityMonitor>>>,
     /// 補正設定
     compensation_settings: LatencyCompensationSettings,
     /// 最後の更新時刻
@@ -1037,7 +1039,19 @@ impl Default for InputLatencyCompensationSystem {
 }
 
 impl System for InputLatencyCompensationSystem {
-    fn run(&mut self, world: &mut World, delta_time: f32) {
+    fn name(&self) -> &'static str {
+        "InputLatencyCompensationSystem"
+    }
+
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Update
+    }
+
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(20) // 中程度の優先度
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let elapsed = now - self.last_update;
         self.last_update = now;
@@ -1045,19 +1059,19 @@ impl System for InputLatencyCompensationSystem {
         // ネットワークリソースを取得
         let network_resource = match world.get_resource::<NetworkResource>() {
             Some(resource) => resource,
-            None => return,
+            None => return Ok(()),
         };
         
         // 入力リソースを取得
         let input_resource = match world.get_resource_mut::<InputResource>() {
             Some(resource) => resource,
-            None => return,
+            None => return Ok(()),
         };
         
         // ローカルプレイヤーエンティティを取得
         let local_entity = match network_resource.controlled_entity {
             Some(entity) => entity,
-            None => return,
+            None => return Ok(()),
         };
         
         // 現在の入力を取得
@@ -1074,6 +1088,24 @@ impl System for InputLatencyCompensationSystem {
         
         // 補正された入力を適用
         self.apply_compensated_input(world, local_entity, compensated_input, delta_time);
+        
+        if let Some(monitor_lock) = &self.network_monitor {
+            if let Ok(monitor) = monitor_lock.lock() {
+                if monitor.packet_loss > 0.01 {
+                    // Only apply compensation when there is packet loss
+                    let compensation_factor = (monitor.packet_loss * 10.0).min(0.2); // Cap at 20% compensation
+                    
+                    // Find entities with network component
+                    for (entity, _) in world.query_entities::<NetworkComponent>() {
+                        // Apply input lag compensation here (simplified)
+                        // In a real implementation, you'd adjust input processing timing
+                        // based on the network conditions
+                    }
+                }
+            }
+        }
+        
+        Ok(())
     }
 }
 
@@ -1089,7 +1121,7 @@ impl InputLatencyCompensationSystem {
     }
     
     /// ネットワーク品質モニタを設定
-    pub fn with_network_monitor(mut self, monitor: Rc<RefCell<NetworkQualityMonitor>>) -> Self {
+    pub fn with_network_monitor(mut self, monitor: Arc<Mutex<NetworkQualityMonitor>>) -> Self {
         self.network_monitor = Some(monitor);
         self
     }
@@ -1110,17 +1142,18 @@ impl InputLatencyCompensationSystem {
         let base_look_ahead = self.compensation_settings.look_ahead_time;
         
         // ネットワーク品質に基づいて先読み時間を調整
-        if let Some(monitor) = &self.network_monitor {
-            let monitor = monitor.borrow();
-            
-            // RTTとジッターに基づいて適応的に調整
-            let adjusted_time = base_look_ahead + monitor.avg_rtt * 0.5 + monitor.jitter * 2.0;
-            
-            // 品質が低下した場合は先読み時間を増やす
-            if monitor.packet_loss > 0.05 {
-                return adjusted_time * (1.0 + monitor.packet_loss * 2.0);
-            } else {
-                return adjusted_time;
+        if let Some(monitor_lock) = &self.network_monitor {
+            if let Ok(monitor) = monitor_lock.lock() {
+                // RTTとジッターに基づいて適応的に調整
+                let adjusted_time = base_look_ahead + monitor.avg_rtt * 0.5 + monitor.jitter * 2.0;
+                
+                // 品質が低下した場合は先読み時間を増やす
+                if monitor.packet_loss > 0.05 {
+                    // f32からf64へ変換して計算
+                    return adjusted_time * (1.0 + f64::from(monitor.packet_loss) * 2.0);
+                } else {
+                    return adjusted_time;
+                }
             }
         }
         

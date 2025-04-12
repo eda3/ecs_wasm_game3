@@ -3,10 +3,11 @@
 //! このモジュールは、ネットワークの状態（RTT、パケットロス、帯域幅など）を
 //! 監視し、適切な品質評価を行う機能を提供します。
 
-use crate::ecs::{Resource, System, World};
+use crate::ecs::{Resource, System, World, SystemPhase, SystemPriority, ResourceManager};
 use crate::network::NetworkResource;
 use std::collections::VecDeque;
 use js_sys::Date;
+use wasm_bindgen::JsValue;
 
 /// 帯域の状態を表す列挙型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
