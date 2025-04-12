@@ -9,6 +9,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
+use wasm_bindgen::JsValue;
 
 use super::messages::{InputData, EntitySnapshot, ComponentData};
 use super::client::NetworkComponent;

@@ -4,13 +4,16 @@
 //! システムを実装します。変更検出と差分同期に重点を置いています。
 
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 use js_sys::Date;
 use serde::{Serialize, Deserialize};
+use wasm_bindgen::JsValue;
+use crate::ecs::{World, Entity, Component, System, Query, Changed, With, Resource};
+use crate::ecs::{SystemPriority, ResourceManager};
 
 use super::messages::{EntitySnapshot, ComponentData};
 use super::client::NetworkComponent;
 use super::protocol::{NetworkMessage, MessageType};
-use crate::ecs::{World, Entity, Component, System, Query, Changed, With, Resource};
 
 /// 同期ポリシー
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -401,20 +404,26 @@ impl System for SyncSystem {
     }
 }
 
-/// 位置コンポーネント（サンプル用）
+/// 位置コンポーネント
 #[derive(Debug, Clone, Component)]
-struct PositionComponent {
-    x: f32,
-    y: f32,
-    z: f32,
+pub struct PositionComponent {
+    /// X座標
+    pub x: f32,
+    /// Y座標
+    pub y: f32,
+    /// Z座標（オプション）
+    pub z: Option<f32>,
 }
 
-/// 速度コンポーネント（サンプル用）
+/// 速度コンポーネント
 #[derive(Debug, Clone, Component)]
-struct VelocityComponent {
-    x: f32,
-    y: f32,
-    z: f32,
+pub struct VelocityComponent {
+    /// X速度
+    pub x: f32,
+    /// Y速度
+    pub y: f32,
+    /// Z速度（オプション）
+    pub z: Option<f32>,
 }
 
 /// メッセージ圧縮機能をサポートするための各種構造体と実装

@@ -4,11 +4,13 @@
 //! ネットワーク帯域幅を節約するためのシステムを実装します。
 
 use crate::ecs::{System, World, Resource, Entity, Resources};
+use crate::ecs::SystemPriority;
 use super::sync::{MessageCompressor, EntitySnapshot, DefaultMessageCompressor};
 use super::NetworkResource;
 use super::client::NetworkClient;
 use super::protocol::{MessageType, NetworkMessage};
 use js_sys::Date;
+use wasm_bindgen::JsValue;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
