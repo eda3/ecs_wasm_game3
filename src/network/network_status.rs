@@ -139,12 +139,17 @@ impl Default for NetworkStatusMonitor {
         let config = NetworkStatusMonitorConfig::default();
         let now = Date::now();
         
+        // 必要な値を先に取得しておく
+        let packet_loss_window_size = config.packet_loss_window_size;
+        let rtt_sample_size = config.rtt_sample_size;
+        let bandwidth_sample_size = config.bandwidth_sample_size;
+        
         Self {
             config,
-            sent_packets: VecDeque::with_capacity(config.packet_loss_window_size),
-            received_sequences: VecDeque::with_capacity(config.packet_loss_window_size),
-            rtt_samples: VecDeque::with_capacity(config.rtt_sample_size),
-            bandwidth_samples: VecDeque::with_capacity(config.bandwidth_sample_size),
+            sent_packets: VecDeque::with_capacity(packet_loss_window_size),
+            received_sequences: VecDeque::with_capacity(packet_loss_window_size),
+            rtt_samples: VecDeque::with_capacity(rtt_sample_size),
+            bandwidth_samples: VecDeque::with_capacity(bandwidth_sample_size),
             last_quality_update: now,
             status: NetworkStatus::default(),
             last_total_bytes: 0,
