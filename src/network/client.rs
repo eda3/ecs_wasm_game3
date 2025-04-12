@@ -135,7 +135,7 @@ impl NetworkClient {
                 let text_str = String::from(text);
                 match NetworkMessage::from_json(&text_str) {
                     Ok(message) => {
-                        client.message_queue.push_back(message);
+                        (*(*client)).message_queue.push_back(message);
                     },
                     Err(err) => {
                         web_sys::console::error_1(&format!("メッセージの解析エラー: {:?}", err).into());
@@ -149,8 +149,8 @@ impl NetworkClient {
         let on_error = Closure::wrap(Box::new(move |event: ErrorEvent| {
             let client = unsafe { &mut *on_error_client.borrow_mut() };
             let error_msg = format!("WebSocketエラー: {:?}", event);
-            client.connection_state = ConnectionState::Error(error_msg.clone());
-            client.last_error = Some(error_msg);
+            (*(*client)).connection_state = ConnectionState::Error(error_msg.clone());
+            (*(*client)).last_error = Some(error_msg);
             web_sys::console::error_1(&"WebSocketエラーが発生しました".into());
         }) as Box<dyn FnMut(ErrorEvent)>);
 
@@ -158,7 +158,7 @@ impl NetworkClient {
         let on_close_client = Rc::clone(&client_ptr);
         let on_close = Closure::wrap(Box::new(move |event: CloseEvent| {
             let client = unsafe { &mut *on_close_client.borrow_mut() };
-            client.connection_state = ConnectionState::Disconnected;
+            (*(*client)).connection_state = ConnectionState::Disconnected;
             let code = event.code();
             let reason = event.reason();
             web_sys::console::log_2(

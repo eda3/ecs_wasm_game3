@@ -16,12 +16,12 @@ pub trait Resource: 'static + Send + Sync + Any {
         TypeId::of::<Self>()
     }
 
-    fn as_any(&self) -> &dyn Any {
-        self
+    fn as_any(&self) -> &dyn Any where Self: Sized {
+        &self
     }
 
-    fn as_any_mut(&mut self) -> &mut dyn Any {
-        self
+    fn as_any_mut(&mut self) -> &mut dyn Any where Self: Sized {
+        &mut self
     }
 }
 
