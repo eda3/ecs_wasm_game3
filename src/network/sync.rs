@@ -296,7 +296,19 @@ impl SyncSystem {
 }
 
 impl System for SyncSystem {
-    fn run(&mut self, world: &mut World, delta_time: f32) {
+    fn name(&self) -> &'static str {
+        "SyncSystem"
+    }
+    
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Update
+    }
+    
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(200) // 通信は優先度高め
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let elapsed = now - self.last_update;
         self.last_update = now;
@@ -313,20 +325,19 @@ impl System for SyncSystem {
                 if self.config.debug_mode {
                     web_sys::console::log_1(&"帯域制限に達したため、同期をスキップします".into());
                 }
-                return;
+                return Ok(());
             }
         }
         
         // 同期対象のエンティティをクエリ
-        let query = world.query::<(Entity, &NetworkComponent)>()
-            .filter(|_, network| network.is_synced);
-            
-        // 今回のフレームで同期するエンティティを収集
         let mut entities_to_sync = Vec::new();
         
-        for (entity, network) in query.iter(world) {
-            if self.should_sync_entity(entity, network, now) {
-                entities_to_sync.push(entity);
+        // EntityとNetworkComponentを持つエンティティを取得（クエリ動作を手動で実装）
+        for entity in world.entities() {
+            if let Some(network) = world.get_component::<NetworkComponent>(entity) {
+                if network.is_synced && self.should_sync_entity(entity, network, now) {
+                    entities_to_sync.push(entity);
+                }
             }
         }
         
@@ -346,25 +357,27 @@ impl System for SyncSystem {
             // 変更されたコンポーネントを検出
             let mut changed_components = HashMap::new();
             
-            for (name, component) in &snapshot.components {
+            for component in &snapshot.components {
                 let hash = self.compute_component_hash(component);
-                let last_hash = state.last_component_hashes.get(name).cloned().unwrap_or(0);
+                // コンポーネント名を取得（実際の実装ではコンポーネントから名前を取得する必要がある）
+                let name = format!("Component_{}", component.component_type());
+                let last_hash = state.last_component_hashes.get(&name).cloned().unwrap_or(0);
                 
                 // ハッシュが変わっていれば変更されたとみなす
                 if hash != last_hash {
                     changed_components.insert(name.clone(), component.clone());
-                    state.last_component_hashes.insert(name.clone(), hash);
+                    state.last_component_hashes.insert(name, hash);
                 }
             }
             
             // 変更がある場合のみ同期
             if !changed_components.is_empty() {
                 // 変更されたコンポーネントのみを含むスナップショットを作成
-                let mut delta_snapshot = EntitySnapshot::new(snapshot.id, now);
-                delta_snapshot.owner_id = snapshot.owner_id;
+                let mut delta_snapshot = EntitySnapshot::new(snapshot.id);
+                delta_snapshot.timestamp = now;
                 
-                for (name, component) in changed_components {
-                    delta_snapshot.add_component(&name, component);
+                for (_, component) in changed_components {
+                    delta_snapshot.components.push(component);
                 }
                 
                 // スナップショットを送信
@@ -375,7 +388,7 @@ impl System for SyncSystem {
                 state.synced_this_frame = true;
                 
                 if self.config.debug_mode {
-                    web_sys::console::log_1(&format!("エンティティ {} を同期: {}バイト", entity.id(), bytes_sent).into());
+                    web_sys::console::log_1(&format!("エンティティ {:?} を同期: {}バイト", entity, bytes_sent).into());
                 }
             }
         }
@@ -384,6 +397,8 @@ impl System for SyncSystem {
         self.entity_states.retain(|entity, _| {
             world.get_component::<NetworkComponent>(*entity).is_some()
         });
+
+        Ok(())
     }
 }
 
