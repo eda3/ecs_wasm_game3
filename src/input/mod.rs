@@ -698,7 +698,7 @@ impl InputSystem {
             .bind_key("move_right", KEY_RIGHT)
             .bind_key("jump", KEY_SPACE)
             .bind_key("action", KEY_E)
-            .bind_key("attack", MOUSE_LEFT);
+            .bind_key("attack", MOUSE_LEFT.into());
         
         // マウス
         state.action_mapping.bind_mouse_button("attack", 0)
