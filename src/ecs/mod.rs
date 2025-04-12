@@ -19,12 +19,14 @@ pub mod component;
 pub mod system;
 pub mod resource;
 pub mod macros;
+pub mod query;
 
 // 主要な構造体をエクスポート
 pub use entity::{Entity, EntityId, EntityManager};
 pub use component::{Component, ComponentManager};
 pub use system::{System, SystemPhase, SystemPriority, SystemProcessor};
 pub use resource::{Resource, ResourceManager};
+pub use query::{Query, Changed, With};
 pub use macros::*;
 
 #[macro_use]
