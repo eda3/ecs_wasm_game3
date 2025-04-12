@@ -17,7 +17,7 @@ use super::{ConnectionState, NetworkError, TimeSyncData, NetworkConfig};
 use crate::ecs::{World, Entity, Component, Resource};
 
 /// ネットワークコンポーネント（エンティティに付与される）
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone)]
 pub struct NetworkComponent {
     /// エンティティIDがネットワーク全体で同期されているか
     pub is_synced: bool,

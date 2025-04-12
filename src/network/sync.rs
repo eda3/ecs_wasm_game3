@@ -406,7 +406,7 @@ impl System for SyncSystem {
 }
 
 /// 位置コンポーネント
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone)]
 pub struct PositionComponent {
     /// X座標
     pub x: f32,
@@ -417,7 +417,7 @@ pub struct PositionComponent {
 }
 
 /// 速度コンポーネント
-#[derive(Debug, Clone, Component)]
+#[derive(Debug, Clone)]
 pub struct VelocityComponent {
     /// X速度
     pub x: f32,

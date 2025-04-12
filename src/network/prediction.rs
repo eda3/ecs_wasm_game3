@@ -727,13 +727,6 @@ impl Component for VelocityComponent {
     }
 }
 
-// ComponentトレイトをInputProcessorに実装
-impl Component for InputProcessor {
-    fn name() -> &'static str {
-        "InputProcessor"
-    }
-}
-
 // ResourceトレイトをNetworkSendQueueに実装
 impl Resource for NetworkSendQueue {
     fn as_any(&self) -> &dyn std::any::Any {
@@ -1308,7 +1301,6 @@ impl InputResource {
 }
 
 /// 入力処理コンポーネント（サンプル用）
-#[derive(Component)]
 pub struct InputProcessor {
     // 入力処理に必要なデータ
 }

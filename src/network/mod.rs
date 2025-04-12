@@ -19,7 +19,8 @@ pub use protocol::{NetworkMessage, MessageType};
 pub use messages::{InputData, PlayerData, ComponentData};
 pub use sync::SyncSystem;
 pub use prediction::{PredictionSystem, ClientPrediction, ServerReconciliation};
-pub use sync::{MessageCompressor, EntitySnapshot as MessagesEntitySnapshot};
+pub use sync::MessageCompressor;
+pub use messages::EntitySnapshot;
 pub use compression_system::NetworkCompressionSystem;
 pub use network_status::*;
 

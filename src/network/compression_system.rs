@@ -3,9 +3,11 @@
 //! このモジュールは、エンティティスナップショットに対して圧縮アルゴリズムを適用し、
 //! ネットワーク帯域幅を節約するためのシステムを実装します。
 
-use crate::ecs::{System, World, Resource, Entity, Resources};
+use crate::ecs::{System, World, Resource, Entity, ResourceManager};
 use crate::ecs::SystemPriority;
-use super::sync::{MessageCompressor, EntitySnapshot, DefaultMessageCompressor};
+use super::sync::MessageCompressor;
+use super::messages::EntitySnapshot;
+use super::sync::DefaultMessageCompressor;
 use super::NetworkResource;
 use super::client::NetworkClient;
 use super::protocol::{MessageType, NetworkMessage};
@@ -248,7 +250,7 @@ impl System for NetworkCompressionSystem {
         "NetworkCompressionSystem"
     }
     
-    fn run(&mut self, world: &mut World, resources: &mut Resources, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // 現在の時間を取得
         let current_time = js_sys::Date::now();
         
