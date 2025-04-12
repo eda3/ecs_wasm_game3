@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use wasm_bindgen::prelude::*;
-use web_sys::KeyboardEvent;
+use web_sys::KeyboardEvent as WebKeyboardEvent;
 
 use crate::ecs::{Entity, System, World};
 
@@ -15,6 +15,26 @@ pub mod key_codes;
 pub mod gestures;
 
 pub use key_codes::*;
+
+/// キーボードイベント
+#[derive(Debug, Clone)]
+pub struct KeyboardEvent {
+    /// イベントタイプ（keydown, keyup）
+    pub event_type: String,
+    /// キーコード
+    pub key: String,
+}
+
+/// マウスイベント
+#[derive(Debug, Clone)]
+pub struct MouseEvent {
+    /// イベントタイプ（mousedown, mouseup, mousemove）
+    pub event_type: String,
+    /// マウス位置
+    pub position: (f32, f32),
+    /// ボタン (0: 左, 1: 中, 2: 右)
+    pub button: Option<i32>,
+}
 
 /// キーボードのキーコード用の型エイリアス
 pub type KeyCode = u32;
@@ -638,6 +658,30 @@ impl InputSystem {
         
         Self {
             state,
+        }
+    }
+    
+    /// キーボードイベントを処理
+    pub fn handle_keyboard_event(&mut self, event: &KeyboardEvent) {
+        // イベントタイプに基づいて処理
+        let is_pressed = event.event_type == "keydown";
+        let key_code = event.key.parse::<KeyCode>().unwrap_or(0);
+        
+        // 入力状態を更新
+        self.state.update_key(key_code, is_pressed);
+    }
+    
+    /// マウスイベントを処理
+    pub fn handle_mouse_event(&mut self, event: &MouseEvent) {
+        // 位置の更新
+        self.state.update_mouse_position(event.position.0, event.position.1, 0.016);
+        
+        // ボタンイベントの処理
+        if let Some(button) = event.button {
+            let button = button as MouseButton;
+            let is_pressed = event.event_type == "mousedown";
+            
+            self.state.update_mouse_button(button, is_pressed);
         }
     }
     
