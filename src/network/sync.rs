@@ -497,8 +497,8 @@ impl DefaultMessageCompressor {
     
     /// エンティティスナップショットを圧縮
     pub fn compress_snapshot(&mut self, snapshot: &mut EntitySnapshot) -> bool {
-        let entity_id = snapshot.entity_id;
-        let had_previous = self.last_sent_states.contains_key(&entity_id);
+        let entity_id = snapshot.id;
+        let had_previous = self.last_sent_states.contains_key(&(entity_id as u32));
         
         // 圧縮前のサイズを推定（実際の実装ではJSONエンコードなどで計算）
         let estimated_size_before = self.estimate_snapshot_size(snapshot);
@@ -506,7 +506,7 @@ impl DefaultMessageCompressor {
         
         // デルタ圧縮（前回の状態との差分のみを送信）
         if self.settings.enable_delta && had_previous {
-            if let Some(last_snapshot) = self.last_sent_states.get(&entity_id) {
+            if let Some(last_snapshot) = self.last_sent_states.get(&(entity_id as u32)) {
                 self.apply_delta_compression(snapshot, last_snapshot);
             }
         }
@@ -527,7 +527,7 @@ impl DefaultMessageCompressor {
         self.stats.message_count += 1;
         
         // 圧縮結果をキャッシュに保存
-        self.last_sent_states.insert(entity_id, snapshot.clone());
+        self.last_sent_states.insert(entity_id as u32, snapshot.clone());
         
         // データが削減されたかどうか
         estimated_size_after < estimated_size_before
@@ -726,10 +726,10 @@ pub struct EntitySnapshot {
 
 impl EntitySnapshot {
     /// 新しいエンティティスナップショットを作成
-    pub fn new(entity_id: u64) -> Self {
+    pub fn new(entity_id: u64, timestamp: f64) -> Self {
         Self {
             id: entity_id,
-            timestamp: Date::now(),
+            timestamp,
             position: None,
             rotation: None,
             velocity: None,
@@ -846,7 +846,7 @@ mod tests {
     
     #[test]
     fn test_entity_snapshot() {
-        let snapshot = EntitySnapshot::new(123)
+        let snapshot = EntitySnapshot::new(123, Date::now())
             .with_position([1.23456, 2.34567, 3.45678])
             .with_rotation([0.1234, 0.2345, 0.3456, 0.9876])
             .with_velocity([10.1234, 20.2345, 30.3456]);
@@ -861,10 +861,10 @@ mod tests {
     #[test]
     fn test_message_compressor() {
         // 圧縮器を作成（位置は1桁、回転は2桁、速度は0桁）
-        let compressor = DefaultMessageCompressor::new(1, 2, 0);
+        let compressor = DefaultMessageCompressor::new();
         
         // テスト用スナップショットを作成
-        let snapshot = EntitySnapshot::new(1)
+        let snapshot = EntitySnapshot::new(1, Date::now())
             .with_position([1.23456, 2.34567, 3.45678])
             .with_rotation([0.1234, 0.2345, 0.3456, 0.9876])
             .with_velocity([10.1234, 20.2345, 30.3456]);
