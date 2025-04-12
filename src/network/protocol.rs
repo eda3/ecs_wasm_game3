@@ -120,18 +120,121 @@ impl NetworkMessage {
             JsValue::from_str(&format!("JSON解析エラー: {:?}", e))
         })?;
         
-        let message: Self = serde_wasm_bindgen::from_value(obj)?;
+        let message_obj = js_sys::Object::from(obj);
+        let message = Self {
+            message_type: extract_message_type(&message_obj)?,
+            sequence: extract_optional_number(&message_obj, "sequence")?.map(|n| n as u32),
+            timestamp: extract_number(&message_obj, "timestamp")?.unwrap_or(0.0),
+            entity_id: extract_optional_number(&message_obj, "entity_id")?.map(|n| n as u32),
+            player_id: extract_optional_number(&message_obj, "player_id")?.map(|n| n as u32),
+            components: None,
+            input_data: None,
+            player_data: None,
+        };
+        
         Ok(message)
     }
 
     /// メッセージをJSON文字列にシリアライズ
     pub fn to_json(&self) -> Result<String, JsValue> {
-        let js_value = serde_wasm_bindgen::to_value(self)?;
-        let json = JSON::stringify(&js_value).map_err(|e| {
+        let obj = js_sys::Object::new();
+        
+        match &self.message_type {
+            MessageType::Connect => { js_sys::Reflect::set(&obj, &"type".into(), &"connect".into())?; },
+            MessageType::ConnectResponse { player_id, success, message } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"connect_response".into())?;
+                js_sys::Reflect::set(&obj, &"player_id".into(), &(*player_id).into())?;
+                js_sys::Reflect::set(&obj, &"success".into(), &(*success).into())?;
+                if let Some(msg) = message {
+                    js_sys::Reflect::set(&obj, &"message".into(), &msg.into())?;
+                }
+            },
+            _ => { js_sys::Reflect::set(&obj, &"type".into(), &"unknown".into())?; }
+        }
+        
+        if let Some(seq) = self.sequence {
+            js_sys::Reflect::set(&obj, &"sequence".into(), &(seq as u32).into())?;
+        }
+        js_sys::Reflect::set(&obj, &"timestamp".into(), &self.timestamp.into())?;
+        if let Some(entity_id) = self.entity_id {
+            js_sys::Reflect::set(&obj, &"entity_id".into(), &(entity_id as u32).into())?;
+        }
+        if let Some(player_id) = self.player_id {
+            js_sys::Reflect::set(&obj, &"player_id".into(), &(player_id as u32).into())?;
+        }
+        
+        let json = JSON::stringify(&obj).map_err(|e| {
             JsValue::from_str(&format!("JSON文字列化エラー: {:?}", e))
         })?;
         
-        Ok(String::from(js_value.as_string().unwrap_or_default()))
+        Ok(String::from(json.as_string().unwrap_or_default()))
+    }
+}
+
+fn extract_message_type(obj: &js_sys::Object) -> Result<MessageType, JsValue> {
+    let type_key = JsValue::from_str("type");
+    if !js_sys::Reflect::has(obj, &type_key)? {
+        return Err(JsValue::from_str("メッセージタイプが見つかりません"));
+    }
+    
+    let type_value = js_sys::Reflect::get(obj, &type_key)?;
+    let type_str = type_value.as_string().unwrap_or_default();
+    
+    match type_str.as_str() {
+        "connect" => Ok(MessageType::Connect),
+        "connect_response" => {
+            let player_id = extract_number(obj, "player_id")?.unwrap_or(0.0) as u32;
+            let success = extract_boolean(obj, "success")?.unwrap_or(false);
+            let message = extract_string(obj, "message")?;
+            Ok(MessageType::ConnectResponse { player_id, success, message })
+        },
+        _ => Err(JsValue::from_str(&format!("未知のメッセージタイプ: {}", type_str)))
+    }
+}
+
+fn extract_number(obj: &js_sys::Object, key: &str) -> Result<Option<f64>, JsValue> {
+    let js_key = JsValue::from_str(key);
+    if !js_sys::Reflect::has(obj, &js_key)? {
+        return Ok(None);
+    }
+    
+    let value = js_sys::Reflect::get(obj, &js_key)?;
+    if value.is_undefined() || value.is_null() {
+        Ok(None)
+    } else {
+        Ok(Some(value.as_f64().unwrap_or(0.0)))
+    }
+}
+
+fn extract_optional_number(obj: &js_sys::Object, key: &str) -> Result<Option<f64>, JsValue> {
+    extract_number(obj, key)
+}
+
+fn extract_boolean(obj: &js_sys::Object, key: &str) -> Result<Option<bool>, JsValue> {
+    let js_key = JsValue::from_str(key);
+    if !js_sys::Reflect::has(obj, &js_key)? {
+        return Ok(None);
+    }
+    
+    let value = js_sys::Reflect::get(obj, &js_key)?;
+    if value.is_undefined() || value.is_null() {
+        Ok(None)
+    } else {
+        Ok(Some(value.as_bool().unwrap_or(false)))
+    }
+}
+
+fn extract_string(obj: &js_sys::Object, key: &str) -> Result<Option<String>, JsValue> {
+    let js_key = JsValue::from_str(key);
+    if !js_sys::Reflect::has(obj, &js_key)? {
+        return Ok(None);
+    }
+    
+    let value = js_sys::Reflect::get(obj, &js_key)?;
+    if value.is_undefined() || value.is_null() {
+        Ok(None)
+    } else {
+        Ok(Some(value.as_string().unwrap_or_default()))
     }
 }
 
