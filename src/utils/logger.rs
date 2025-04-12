@@ -7,7 +7,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::console;
 
 /// ログレベル
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum LogLevel {
     /// デバッグ情報（詳細な情報）
     Debug,
