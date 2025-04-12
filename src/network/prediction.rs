@@ -176,7 +176,19 @@ impl Default for ServerReconciliation {
 }
 
 impl System for ServerReconciliation {
-    fn run(&mut self, world: &mut World, delta_time: f32) {
+    fn name(&self) -> &'static str {
+        "ServerReconciliation"
+    }
+    
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Update
+    }
+    
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(50) // 中程度の優先度
+    }
+    
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // 現在の時刻を取得
         let now = Date::now();
         self.last_update = now;
@@ -185,12 +197,12 @@ impl System for ServerReconciliation {
         let owned_entities = self.get_client_owned_entities(world);
         
         // ネットワーク送信キューを取得
-        let mut send_queue = match world.get_resource_mut::<NetworkSendQueue>() {
+        let mut send_queue = match resources.get_resource_mut::<NetworkSendQueue>() {
             Some(queue) => queue,
             None => {
                 #[cfg(feature = "debug_network")]
                 web_sys::console::log_1(&"エラー: NetworkSendQueueが見つかりません。修正を送信できません。".into());
-                return;
+                return Ok(());
             }
         };
         
@@ -247,41 +259,20 @@ impl System for ServerReconciliation {
                     let last_sequence = inputs.back().map(|(_, seq)| *seq).unwrap_or(0);
                     
                     // ネットワーク状態に基づいて最適化
-                    if let Some(network_status) = world.get_resource::<NetworkStatus>() {
-                        // ネットワーク品質に応じて送信するデータを調整
-                        match network_status.bandwidth_status {
-                            BandwidthStatus::Poor | BandwidthStatus::Limited => {
-                                // 低帯域幅モードでは必須コンポーネントのみ送信
-                                self.optimize_snapshot_for_poor_network(&mut snapshot);
-                            },
-                            _ => {}
+                    if let Some(network_status) = resources.get_resource::<NetworkStatus>() {
+                        if network_status.bandwidth_status == BandwidthStatus::Poor {
+                            // 通信状態が悪い場合は送信データを最小限に
+                            self.optimize_snapshot_for_poor_network(&mut snapshot);
                         }
                     }
                     
-                    // ネットワーク送信キューに修正を追加
+                    // 修正をキューに追加
                     send_queue.queue_snapshot(client_id, entity, snapshot, last_sequence);
-                    
-                    // デバッグログ
-                    #[cfg(feature = "debug_network")]
-                    web_sys::console::log_1(&format!("状態修正送信: クライアント={}, エンティティ={:?}, シーケンス={}", 
-                        client_id, entity, last_sequence).into());
-                    
-                    // 長期的な処理を最適化するために古い入力を削除
-                    // 確認済みの入力を削除するためにキューをクリーンアップ
-                    if let Some(inputs_mut) = self.client_inputs.get_mut(&client_id) {
-                        let confirmed_count = inputs_mut.len() / 2; // 半分を確認済みとする
-                        if confirmed_count > 0 && inputs_mut.len() > 20 {
-                            for _ in 0..confirmed_count {
-                                inputs_mut.pop_front();
-                            }
-                            
-                            #[cfg(feature = "debug_network")]
-                            web_sys::console::log_1(&format!("入力履歴クリーンアップ: {} 個の確認済み入力を削除", confirmed_count).into());
-                        }
-                    }
                 }
             }
         }
+        
+        Ok(())
     }
 }
 
