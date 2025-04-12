@@ -16,13 +16,9 @@ pub trait Resource: 'static + Send + Sync + Any {
         TypeId::of::<Self>()
     }
 
-    fn as_any(&self) -> &dyn Any + '_ where Self: Sized {
-        self
-    }
+    fn as_any(&self) -> &dyn Any;
 
-    fn as_any_mut(&mut self) -> &mut dyn Any + '_ where Self: Sized {
-        self
-    }
+    fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
 /// リソースが見つからない場合のエラー
@@ -130,7 +126,15 @@ mod tests {
         value: i32,
     }
 
-    impl Resource for TestResource {}
+    impl Resource for TestResource {
+        fn as_any(&self) -> &dyn Any {
+            self
+        }
+
+        fn as_any_mut(&mut self) -> &mut dyn Any {
+            self
+        }
+    }
 
     #[test]
     fn test_resource_manager() {

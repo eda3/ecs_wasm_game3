@@ -33,7 +33,15 @@ impl Default for GameConfig {
     }
 }
 
-impl Resource for GameConfig {}
+impl Resource for GameConfig {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 /// 時間管理リソース
 /// 
@@ -58,7 +66,15 @@ impl Default for TimeResource {
     }
 }
 
-impl Resource for TimeResource {}
+impl Resource for TimeResource {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 /// 入力状態リソース
 /// 
@@ -75,7 +91,15 @@ pub struct InputState {
     pub pressed_buttons: std::collections::HashSet<u8>,
 }
 
-impl Resource for InputState {}
+impl Resource for InputState {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 /// アセット管理リソース
 /// 
@@ -122,7 +146,15 @@ impl AssetManager {
     }
 }
 
-impl Resource for AssetManager {}
+impl Resource for AssetManager {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 /// ゲーム統計リソース
 /// 
@@ -141,7 +173,15 @@ pub struct GameStats {
     pub last_frame_time: f32,
 }
 
-impl Resource for GameStats {}
+impl Resource for GameStats {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 #[cfg(test)]
 mod tests {

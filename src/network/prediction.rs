@@ -735,10 +735,26 @@ impl Component for InputProcessor {
 }
 
 // ResourceトレイトをNetworkSendQueueに実装
-impl Resource for NetworkSendQueue {}
+impl Resource for NetworkSendQueue {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 // ResourceトレイトをNetworkStatusに実装
-impl Resource for NetworkStatus {}
+impl Resource for NetworkStatus {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 /// ネットワーク送信キュー
 /// 
