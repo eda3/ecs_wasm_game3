@@ -367,9 +367,14 @@ impl ServerReconciliation {
         let mut owned_entities = Vec::new();
         
         // ECSクエリ機能を使用して、NetworkComponentを持つエンティティを検索
-        let entities = world.query_entities::<NetworkComponent>();
+        // let entities = world.query_entities::<NetworkComponent>();
         
-        for entity in entities {
+        // Worldにquery_entitiesメソッドがないため、代替手段を使用
+        // すべてのエンティティに対して手動でチェック
+        let entity_manager = &world.processor.entity_manager;
+        for entity_id in entity_manager.active_entities.iter() {
+            let entity = Entity::new(*entity_id);
+            
             if let Some(network_comp) = world.get_component::<NetworkComponent>(entity) {
                 if let Some(owner_id) = network_comp.owner_id {
                     // クライアント所有のエンティティを追加
