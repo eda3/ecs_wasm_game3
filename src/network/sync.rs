@@ -248,7 +248,14 @@ impl SyncSystem {
     
     /// エンティティのスナップショットを作成
     fn create_entity_snapshot(&self, world: &World, entity: Entity, now: f64) -> LocalEntitySnapshot {
-        let mut snapshot = LocalEntitySnapshot::new(entity.id() as u64, now);
+        // EntityIdの値を取得して使用
+        let entity_id = entity.id();
+        let id_value = match format!("{}", entity_id).strip_prefix("Entity(").and_then(|s| s.strip_suffix(")")) {
+            Some(id_str) => id_str.parse::<u64>().unwrap_or(0),
+            None => 0, // フォールバック
+        };
+        
+        let mut snapshot = LocalEntitySnapshot::new(id_value, now);
         
         // 各コンポーネントをスナップショットに追加
         // 実際のゲームでは、コンポーネントの具体的な型と値を取得する必要がある
@@ -256,12 +263,14 @@ impl SyncSystem {
         
         // 例: 位置コンポーネント
         if let Some(position) = world.get_component::<PositionComponent>(entity) {
-            snapshot.with_position([position.x, position.y, position.z.unwrap_or(0.0)]);
+            let pos = [position.x, position.y, position.z.unwrap_or(0.0)];
+            snapshot.position = Some(pos);
         }
         
         // 例: 速度コンポーネント
         if let Some(velocity) = world.get_component::<VelocityComponent>(entity) {
-            snapshot.with_velocity([velocity.x, velocity.y, velocity.z.unwrap_or(0.0)]);
+            let vel = [velocity.x, velocity.y, velocity.z.unwrap_or(0.0)];
+            snapshot.velocity = Some(vel);
         }
         
         // 他のコンポーネントも同様に追加
@@ -286,7 +295,7 @@ impl SyncSystem {
         
         // スナップショットからコンポーネント更新メッセージを作成
         let message = NetworkMessage::new(MessageType::ComponentUpdate)
-            .with_entity_id(snapshot.id)
+            .with_entity_id(snapshot.id.try_into().unwrap())
             .with_components(snapshot.components);
             
         // メッセージのバイト数を計算（簡略化）
