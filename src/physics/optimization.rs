@@ -367,6 +367,49 @@ impl PhysicsOptimizer {
     }
 }
 
+/// 衝突ペアを生成します
+///
+/// エンティティのリストと空間分割グリッドを使用して、潜在的な衝突ペアを生成します。
+/// 衝突フィルターが指定された場合、それを使用して衝突ペアをフィルタリングします。
+///
+/// # 引数
+///
+/// * `entities` - PhysicsEntityのベクター
+/// * `spatial_grid` - 空間分割グリッド
+/// * `collision_filter` - 衝突フィルター（省略可能）
+///
+/// # 戻り値
+///
+/// 衝突する可能性のあるエンティティのIDペアのベクター
+pub fn generate_collision_pairs(
+    entities: &Vec<PhysicsEntity>,
+    spatial_grid: &SpatialGrid,
+    collision_filter: &Option<CollisionFilter>,
+) -> Vec<(u32, u32)> {
+    let mut grid = SpatialGrid::new(spatial_grid.cell_size);
+    
+    // 空間分割グリッドにエンティティを登録
+    for entity in entities {
+        grid.insert_entity(entity);
+    }
+    
+    // 潜在的な衝突ペアを取得
+    let potential_pairs = grid.get_all_potential_pairs();
+    
+    // 衝突フィルターが指定されている場合、フィルタリングを適用
+    if let Some(filter) = collision_filter {
+        potential_pairs
+            .into_iter()
+            .filter(|(entity_a_id, entity_b_id)| {
+                filter.should_collide(*entity_a_id, *entity_b_id)
+            })
+            .collect()
+    } else {
+        // フィルターがない場合はすべてのペアを返す
+        potential_pairs
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

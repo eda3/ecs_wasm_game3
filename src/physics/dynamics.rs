@@ -687,4 +687,69 @@ mod tests {
         assert!(entity_a.position.0 < 0.0);
         assert!(entity_b.position.0 > 15.0);
     }
+}
+
+// モジュールレベルの公開関数
+// これらの関数は、PhysicsWorldから呼び出しやすいように、モジュールレベルで再エクスポートされます。
+
+/// エンティティに力を適用します
+pub fn apply_force(entity: &mut PhysicsEntity, force: (f64, f64)) {
+    let force_generator = ForceGenerator::new((0.0, 0.0));
+    force_generator.apply_force(entity, force);
+}
+
+/// エンティティに重力を適用します
+pub fn apply_gravity(entity: &mut PhysicsEntity, gravity: (f64, f64)) {
+    let force_generator = ForceGenerator::new(gravity);
+    force_generator.apply_gravity(entity);
+}
+
+/// エンティティに衝撃（インパルス）を適用します
+pub fn apply_impulse(entity: &mut PhysicsEntity, impulse: (f64, f64)) {
+    if entity.is_static {
+        return;
+    }
+    
+    // 衝撃はP=mv（運動量）の変化として速度に直接影響する
+    entity.velocity.0 += impulse.0 / entity.mass;
+    entity.velocity.1 += impulse.1 / entity.mass;
+}
+
+/// エンティティにトルク（回転力）を適用します
+pub fn apply_torque(entity: &mut PhysicsEntity, torque: f64) {
+    let force_generator = ForceGenerator::new((0.0, 0.0));
+    force_generator.apply_torque(entity, torque);
+}
+
+/// エンティティの物理状態を時間ステップで更新します
+pub fn integrate(entity: &mut PhysicsEntity, dt: f64) {
+    let integrator = Integrator::new();
+    integrator.integrate(entity, dt, (0.0, 0.0), 0.0);
+}
+
+/// 2つのエンティティ間の衝突を解決します
+pub fn resolve_collision(
+    entity_a: &mut PhysicsEntity,
+    entity_b: &mut PhysicsEntity,
+    collision: &Collision,
+) {
+    let resolver = CollisionResolver::new();
+    resolver.resolve_collision(entity_a, entity_b, collision);
+}
+
+/// エンティティに減衰（抵抗）を適用します
+pub fn apply_damping(entity: &mut PhysicsEntity, damping: f64) {
+    if entity.is_static || damping <= 0.0 {
+        return;
+    }
+    
+    // 線形減衰係数を計算
+    let factor = 1.0 - damping;
+    
+    // 速度に減衰を適用
+    entity.velocity.0 *= factor;
+    entity.velocity.1 *= factor;
+    
+    // 角速度に減衰を適用
+    entity.angular_velocity *= factor;
 } 
