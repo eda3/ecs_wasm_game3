@@ -865,7 +865,19 @@ impl Default for EntitySyncSystem {
 }
 
 impl System for EntitySyncSystem {
-    fn run(&mut self, world: &mut World, delta_time: f32) {
+    fn name(&self) -> &'static str {
+        "EntitySyncSystem"
+    }
+
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Update
+    }
+
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(20) // InterpolationSystemより高い優先度
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         self.last_update = now;
         
@@ -877,6 +889,8 @@ impl System for EntitySyncSystem {
             // エンティティの状態をスナップショットとして保存
             // 定期的にスナップショットをクライアントに送信
         }
+
+        Ok(())
     }
 }
 
