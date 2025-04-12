@@ -54,7 +54,7 @@ impl Default for InputData {
 }
 
 /// コンポーネントデータの型
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum ComponentData {
     /// 位置コンポーネント
