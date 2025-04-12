@@ -256,12 +256,12 @@ impl SyncSystem {
         
         // 例: 位置コンポーネント
         if let Some(position) = world.get_component::<PositionComponent>(entity) {
-            snapshot.with_position([position.x, position.y, position.z]);
+            snapshot.with_position([position.x, position.y, position.z.unwrap_or(0.0)]);
         }
         
         // 例: 速度コンポーネント
         if let Some(velocity) = world.get_component::<VelocityComponent>(entity) {
-            snapshot.with_velocity([velocity.x, velocity.y, velocity.z]);
+            snapshot.with_velocity([velocity.x, velocity.y, velocity.z.unwrap_or(0.0)]);
         }
         
         // 他のコンポーネントも同様に追加
