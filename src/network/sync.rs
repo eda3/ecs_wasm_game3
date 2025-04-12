@@ -505,9 +505,13 @@ impl DefaultMessageCompressor {
         
         // デルタ圧縮（前回の状態との差分のみを送信）
         if self.settings.enable_delta && had_previous {
-            if let Some(last_snapshot) = self.last_sent_states.get(&(entity_id as u32)) {
-                self.apply_delta_compression(snapshot, last_snapshot);
-            }
+            // 一時的にlast_snapshotをクローンして借用を終了させる
+            let last_snapshot_clone = {
+                let last_snapshot = self.last_sent_states.get(&(entity_id as u32)).unwrap();
+                last_snapshot.clone()
+            };
+            // クローンを使用してデルタ圧縮を適用
+            self.apply_delta_compression(snapshot, &last_snapshot_clone);
         }
         
         // フィールドマスキング（変更があったフィールドのみを送信）
