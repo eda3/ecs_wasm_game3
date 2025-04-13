@@ -40,8 +40,23 @@ impl Default for SystemPriority {
     }
 }
 
-/// システムのトレイト
+#[cfg(not(target_arch = "wasm32"))]
 pub trait System: 'static + Send + Sync {
+    /// システムの名前を取得
+    fn name(&self) -> &'static str;
+    
+    /// システムの実行フェーズを取得
+    fn phase(&self) -> SystemPhase;
+    
+    /// システムの優先度を取得
+    fn priority(&self) -> SystemPriority;
+    
+    /// システムを実行
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue>;
+}
+
+#[cfg(target_arch = "wasm32")]
+pub trait System: 'static {
     /// システムの名前を取得
     fn name(&self) -> &'static str;
     
@@ -145,22 +160,50 @@ impl SystemProcessor {
     }
 
     /// リソースを追加または更新
-    pub fn insert_resource<T: Resource>(&mut self, resource: T) {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn insert_resource<T: 'static + Send + Sync + Resource>(&mut self, resource: T) {
+        self.resource_manager.insert(resource);
+    }
+
+    /// リソースを追加または更新（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn insert_resource<T: 'static + Resource>(&mut self, resource: T) {
         self.resource_manager.insert(resource);
     }
 
     /// リソースを取得
-    pub fn get_resource<T: Resource>(&self) -> Option<&T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_resource<T: 'static + Send + Sync + Resource>(&self) -> Option<&T> {
+        self.resource_manager.get::<T>()
+    }
+
+    /// リソースを取得（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn get_resource<T: 'static + Resource>(&self) -> Option<&T> {
         self.resource_manager.get::<T>()
     }
 
     /// リソースを可変で取得
-    pub fn get_resource_mut<T: Resource>(&mut self) -> Option<&mut T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_resource_mut<T: 'static + Send + Sync + Resource>(&mut self) -> Option<&mut T> {
+        self.resource_manager.get_mut::<T>()
+    }
+
+    /// リソースを可変で取得（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn get_resource_mut<T: 'static + Resource>(&mut self) -> Option<&mut T> {
         self.resource_manager.get_mut::<T>()
     }
 
     /// リソースを削除
-    pub fn remove_resource<T: Resource>(&mut self) -> Option<T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn remove_resource<T: 'static + Send + Sync + Resource>(&mut self) -> Option<T> {
+        self.resource_manager.remove::<T>()
+    }
+
+    /// リソースを削除（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn remove_resource<T: 'static + Resource>(&mut self) -> Option<T> {
         self.resource_manager.remove::<T>()
     }
 

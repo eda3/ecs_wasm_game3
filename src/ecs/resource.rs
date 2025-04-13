@@ -2,11 +2,32 @@ use std::any::{Any, TypeId};
 use std::collections::HashMap;
 use std::fmt;
 
-/// リソースの基本トレイト
+#[cfg(not(target_arch = "wasm32"))]
+/// リソースの基本トレイト（非Wasm環境用）
 /// 
 /// グローバルに共有される状態を管理するための基本インターフェースを提供します。
 /// すべてのリソースはこのトレイトを実装する必要があります。
 pub trait Resource: 'static + Send + Sync + Any {
+    /// リソースの型IDを取得
+    /// 
+    /// # 戻り値
+    /// 
+    /// リソースの型ID
+    fn type_id(&self) -> TypeId {
+        TypeId::of::<Self>()
+    }
+
+    fn as_any(&self) -> &dyn Any;
+
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+#[cfg(target_arch = "wasm32")]
+/// リソースの基本トレイト（Wasm環境用）
+/// 
+/// WebAssembly環境では通常シングルスレッドで動作するため、
+/// SendとSyncトレイトの制約を取り除いています。
+pub trait Resource: 'static + Any {
     /// リソースの型IDを取得
     /// 
     /// # 戻り値
@@ -51,25 +72,64 @@ impl ResourceManager {
     }
 
     /// リソースを追加
-    pub fn insert<T: Resource>(&mut self, resource: T) {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn insert<T: 'static + Send + Sync + Resource>(&mut self, resource: T) {
+        let type_id = TypeId::of::<T>();
+        self.resources.insert(type_id, Box::new(resource));
+    }
+
+    /// リソースを追加（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn insert<T: 'static + Resource>(&mut self, resource: T) {
         let type_id = TypeId::of::<T>();
         self.resources.insert(type_id, Box::new(resource));
     }
 
     /// リソースを取得
-    pub fn get<T: Resource>(&self) -> Option<&T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get<T: 'static + Send + Sync + Resource>(&self) -> Option<&T> {
+        let type_id = TypeId::of::<T>();
+        self.resources.get(&type_id).and_then(|r| r.as_any().downcast_ref::<T>())
+    }
+
+    /// リソースを取得（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn get<T: 'static + Resource>(&self) -> Option<&T> {
         let type_id = TypeId::of::<T>();
         self.resources.get(&type_id).and_then(|r| r.as_any().downcast_ref::<T>())
     }
 
     /// リソースを可変で取得
-    pub fn get_mut<T: Resource>(&mut self) -> Option<&mut T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn get_mut<T: 'static + Send + Sync + Resource>(&mut self) -> Option<&mut T> {
+        let type_id = TypeId::of::<T>();
+        self.resources.get_mut(&type_id).and_then(|r| r.as_any_mut().downcast_mut::<T>())
+    }
+
+    /// リソースを可変で取得（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn get_mut<T: 'static + Resource>(&mut self) -> Option<&mut T> {
         let type_id = TypeId::of::<T>();
         self.resources.get_mut(&type_id).and_then(|r| r.as_any_mut().downcast_mut::<T>())
     }
 
     /// リソースを削除
-    pub fn remove<T: Resource>(&mut self) -> Option<T> {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn remove<T: 'static + Send + Sync + Resource>(&mut self) -> Option<T> {
+        let type_id = TypeId::of::<T>();
+        self.resources.remove(&type_id).map(|boxed_resource| {
+            // Box<dyn Resource>からBox<T>に変換
+            let raw_ptr = Box::into_raw(boxed_resource);
+            unsafe {
+                // rawポインタをBox<T>にキャストして所有権を取り戻す
+                *Box::from_raw(raw_ptr as *mut T)
+            }
+        })
+    }
+
+    /// リソースを削除（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn remove<T: 'static + Resource>(&mut self) -> Option<T> {
         let type_id = TypeId::of::<T>();
         self.resources.remove(&type_id).map(|boxed_resource| {
             // Box<dyn Resource>からBox<T>に変換
@@ -82,7 +142,15 @@ impl ResourceManager {
     }
 
     /// リソースが存在するか確認
-    pub fn contains<T: Resource>(&self) -> bool {
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn contains<T: 'static + Send + Sync + Resource>(&self) -> bool {
+        let type_id = TypeId::of::<T>();
+        self.resources.contains_key(&type_id)
+    }
+
+    /// リソースが存在するか確認（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn contains<T: 'static + Resource>(&self) -> bool {
         let type_id = TypeId::of::<T>();
         self.resources.contains_key(&type_id)
     }

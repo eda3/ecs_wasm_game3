@@ -109,22 +109,50 @@ impl World {
     }
 
     /// リソースを追加または更新
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn insert_resource<T: 'static + Send + Sync + resource::Resource>(&mut self, resource: T) {
         self.processor.insert_resource(resource);
     }
 
+    /// リソースを追加または更新（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn insert_resource<T: 'static + resource::Resource>(&mut self, resource: T) {
+        self.processor.insert_resource(resource);
+    }
+
     /// リソースを取得
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_resource<T: 'static + Send + Sync + resource::Resource>(&self) -> Option<&T> {
         self.processor.get_resource()
     }
 
+    /// リソースを取得（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn get_resource<T: 'static + resource::Resource>(&self) -> Option<&T> {
+        self.processor.get_resource()
+    }
+
     /// リソースを可変で取得
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn get_resource_mut<T: 'static + Send + Sync + resource::Resource>(&mut self) -> Option<&mut T> {
         self.processor.get_resource_mut()
     }
 
+    /// リソースを可変で取得（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn get_resource_mut<T: 'static + resource::Resource>(&mut self) -> Option<&mut T> {
+        self.processor.get_resource_mut()
+    }
+
     /// リソースを削除
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn remove_resource<T: 'static + Send + Sync + resource::Resource>(&mut self) -> Option<T> {
+        self.processor.remove_resource()
+    }
+
+    /// リソースを削除（Wasm環境用）
+    #[cfg(target_arch = "wasm32")]
+    pub fn remove_resource<T: 'static + resource::Resource>(&mut self) -> Option<T> {
         self.processor.remove_resource()
     }
 
