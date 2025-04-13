@@ -158,79 +158,407 @@ impl GameState {
 
     // 各状態の描画処理
     fn render_splash(&self) -> Result<(), JsValue> {
-        // TODO: スプラッシュ画面の描画処理
+        // 画面クリア
+        self.context.clear_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // 背景色設定
+        self.context.set_fill_style_str("#1a75ff"); // 青系の背景
+        self.context.fill_rect(
+            0.0,
+            0.0, 
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // タイトルテキスト
+        self.context.set_font("48px Arial");
+        self.context.set_text_align("center");
+        self.context.set_fill_style_str("white");
+        self.context.fill_text(
+            "Rust WebAssembly Game",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() / 4) as f64,
+        )?;
+
+        // 説明テキスト
+        self.context.set_font("24px Arial");
+        self.context.fill_text(
+            "Press any key or click to start",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() / 2) as f64,
+        )?;
+
+        // バージョン情報
+        self.context.set_font("16px Arial");
+        self.context.fill_text(
+            "Version 0.1.0",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() as f64 - 20.0),
+        )?;
+
         Ok(())
     }
 
     fn render_main_menu(&self) -> Result<(), JsValue> {
-        // TODO: メインメニューの描画処理
+        // 画面クリア
+        self.context.clear_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // 背景色設定
+        self.context.set_fill_style_str("#333366"); // 濃い青
+        self.context.fill_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // タイトルテキスト
+        self.context.set_font("48px Arial");
+        self.context.set_text_align("center");
+        self.context.set_fill_style_str("white");
+        self.context.fill_text(
+            "Main Menu",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() / 4) as f64,
+        )?;
+
+        // メニューオプション
+        self.context.set_font("24px Arial");
+        let options = vec![
+            "1. New Game",
+            "2. Multiplayer",
+            "3. Options",
+            "4. Exit",
+        ];
+
+        let spacing = 40.0;
+        let start_y = (self.canvas.height() / 2) as f64;
+
+        for (i, option) in options.iter().enumerate() {
+            self.context.fill_text(
+                option,
+                (self.canvas.width() / 2) as f64,
+                start_y + (i as f64 * spacing),
+            )?;
+        }
+
+        // 操作説明
+        self.context.set_font("16px Arial");
+        self.context.fill_text(
+            "Use keyboard (1-4) or mouse to select",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() as f64 - 20.0),
+        )?;
+
         Ok(())
     }
 
     fn render_playing(&self) -> Result<(), JsValue> {
-        // TODO: ゲームプレイ中の描画処理
+        // 画面クリア
+        self.context.clear_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // 背景色設定
+        self.context.set_fill_style_str("#222222"); // 暗めの背景
+        self.context.fill_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // プレーヤーの表示（簡易的な図形）
+        self.context.begin_path();
+        self.context.arc(
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() / 2) as f64,
+            20.0,
+            0.0,
+            std::f64::consts::PI * 2.0,
+        )?;
+        self.context.set_stroke_style_str("#44cc44");
+        self.context.stroke();
+
+        // スコア表示
+        self.context.set_font("16px Arial");
+        self.context.set_text_align("left");
+        self.context.set_fill_style_str("red");
+        self.context.fill_text(
+            "Score: 0",
+            10.0,
+            20.0,
+        )?;
+
+        // その他のゲーム情報
+        self.context.set_text_align("right");
+        self.context.fill_text(
+            "Level: 1",
+            (self.canvas.width() as f64) - 10.0,
+            20.0,
+        )?;
+
+        // 操作説明
+        self.context.set_text_align("center");
+        self.context.set_fill_style_str("white");
+        self.context.set_font("12px Arial");
+        self.context.fill_text(
+            "ESC: Pause | G: Game Over",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() as f64) - 10.0,
+        )?;
+
         Ok(())
     }
 
     fn render_paused(&self) -> Result<(), JsValue> {
-        // TODO: ポーズ中の描画処理
+        // ポーズ画面のオーバーレイ
+        self.context.set_fill_style_str("rgba(0, 0, 0, 0.5)");
+        self.context.fill_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // ポーズテキスト
+        self.context.set_font("48px Arial");
+        self.context.set_text_align("center");
+        self.context.set_fill_style_str("white");
+        self.context.fill_text(
+            "PAUSED",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() / 2) as f64,
+        )?;
+
+        // 操作説明
+        self.context.set_font("24px Arial");
+        self.context.fill_text(
+            "Press ESC or click to resume",
+            (self.canvas.width() / 2) as f64,
+            ((self.canvas.height() as f64) / 2.0 + 50.0),
+        )?;
+
         Ok(())
     }
 
     fn render_game_over(&self) -> Result<(), JsValue> {
-        // TODO: ゲームオーバーの描画処理
+        // 画面クリア
+        self.context.clear_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // 背景色設定
+        self.context.set_fill_style_str("#660000"); // 暗い赤色
+        self.context.fill_rect(
+            0.0,
+            0.0,
+            self.canvas.width() as f64,
+            self.canvas.height() as f64,
+        );
+
+        // ゲームオーバーテキスト
+        self.context.set_font("48px Arial");
+        self.context.set_text_align("center");
+        self.context.set_fill_style_str("white");
+        self.context.fill_text(
+            "GAME OVER",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() / 3) as f64,
+        )?;
+
+        // スコア表示
+        self.context.set_font("24px Arial");
+        self.context.fill_text(
+            "Score: 0",
+            (self.canvas.width() / 2) as f64,
+            (self.canvas.height() / 2) as f64,
+        )?;
+
+        // 操作説明
+        self.context.set_font("18px Arial");
+        self.context.fill_text(
+            "Press R to retry or M for main menu",
+            (self.canvas.width() / 2) as f64,
+            ((self.canvas.height() as f64) / 3.0 * 2.0),
+        )?;
+
         Ok(())
     }
 
     // 各状態のキー入力処理
     fn handle_splash_key(&mut self, key_code: u32) -> Result<(), JsValue> {
-        // TODO: スプラッシュ画面のキー入力処理
+        // どのキーでもスプラッシュ画面からメインメニューに遷移
+        web_sys::console::log_1(&"スプラッシュ画面からメインメニューへ遷移します".into());
+        self.current_state = GameStateType::MainMenu;
         Ok(())
     }
 
     fn handle_main_menu_key(&mut self, key_code: u32) -> Result<(), JsValue> {
-        // TODO: メインメニューのキー入力処理
+        // メインメニューでのキー入力処理
+        match key_code {
+            // 1キー: 新規ゲーム
+            49 => {
+                web_sys::console::log_1(&"新規ゲームを開始します".into());
+                self.current_state = GameStateType::Playing;
+            },
+            // 2キー: マルチプレイヤー (同じくゲーム画面へ)
+            50 => {
+                web_sys::console::log_1(&"マルチプレイヤーモードを開始します".into());
+                self.current_state = GameStateType::Playing;
+            },
+            // 3キー: オプション (未実装なので何もしない)
+            51 => {
+                web_sys::console::log_1(&"オプション機能は未実装です".into());
+            },
+            // 4キー: 終了 (スプラッシュ画面に戻る)
+            52 => {
+                web_sys::console::log_1(&"メニューから終了します".into());
+                self.current_state = GameStateType::Splash;
+            },
+            // その他のキー
+            _ => {}
+        }
         Ok(())
     }
 
     fn handle_playing_key(&mut self, key_code: u32) -> Result<(), JsValue> {
-        // TODO: ゲームプレイ中のキー入力処理
+        // ゲームプレイ中のキー入力処理
+        match key_code {
+            // ESCキー: ポーズ
+            27 => {
+                web_sys::console::log_1(&"ゲームをポーズします".into());
+                self.current_state = GameStateType::Paused;
+            },
+            // Gキー: ゲームオーバー (テスト用)
+            71 => {
+                web_sys::console::log_1(&"ゲームオーバーへ遷移します (テスト用)".into());
+                self.current_state = GameStateType::GameOver;
+            },
+            // その他のキー: ゲームプレイのアクションなど
+            _ => {}
+        }
         Ok(())
     }
 
     fn handle_paused_key(&mut self, key_code: u32) -> Result<(), JsValue> {
-        // TODO: ポーズ中のキー入力処理
+        // ポーズ中のキー入力処理
+        match key_code {
+            // ESCキー: ゲームに戻る
+            27 => {
+                web_sys::console::log_1(&"ゲームを再開します".into());
+                self.current_state = GameStateType::Playing;
+            },
+            // Mキー: メインメニューに戻る
+            77 => {
+                web_sys::console::log_1(&"メインメニューに戻ります".into());
+                self.current_state = GameStateType::MainMenu;
+            },
+            // その他のキー
+            _ => {}
+        }
         Ok(())
     }
 
     fn handle_game_over_key(&mut self, key_code: u32) -> Result<(), JsValue> {
-        // TODO: ゲームオーバーのキー入力処理
+        // ゲームオーバー画面のキー入力処理
+        match key_code {
+            // Rキー: リトライ (ゲーム画面に戻る)
+            82 => {
+                web_sys::console::log_1(&"ゲームをリトライします".into());
+                self.current_state = GameStateType::Playing;
+            },
+            // Mキー: メインメニューに戻る
+            77 => {
+                web_sys::console::log_1(&"メインメニューに戻ります".into());
+                self.current_state = GameStateType::MainMenu;
+            },
+            // その他のキー
+            _ => {}
+        }
         Ok(())
     }
 
     // 各状態のマウス入力処理
     fn handle_splash_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
-        // TODO: スプラッシュ画面のマウス入力処理
+        // スプラッシュ画面でのクリックはメインメニューへ移行
+        web_sys::console::log_1(&"スプラッシュ画面をクリック: メインメニューへ遷移します".into());
+        self.current_state = GameStateType::MainMenu;
         Ok(())
     }
 
     fn handle_main_menu_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
-        // TODO: メインメニューのマウス入力処理
+        // メインメニューでのクリック位置に応じてアクション
+        let canvas_height = self.canvas.height() as f32;
+        
+        // メニューオプションの領域を定義
+        if y >= 180.0 && y <= 220.0 {
+            // 「新規ゲーム」オプション
+            web_sys::console::log_1(&"「新規ゲーム」をクリックしました".into());
+            self.current_state = GameStateType::Playing;
+        } else if y >= 230.0 && y <= 270.0 {
+            // 「マルチプレイヤー」オプション
+            web_sys::console::log_1(&"「マルチプレイヤー」をクリックしました".into());
+            self.current_state = GameStateType::Playing;
+        } else if y >= 280.0 && y <= 320.0 {
+            // 「オプション」オプション
+            web_sys::console::log_1(&"「オプション」機能は未実装です".into());
+        } else if y >= 330.0 && y <= 370.0 {
+            // 「終了」オプション
+            web_sys::console::log_1(&"「終了」をクリックしました".into());
+            self.current_state = GameStateType::Splash;
+        }
+        
         Ok(())
     }
 
     fn handle_playing_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
-        // TODO: ゲームプレイ中のマウス入力処理
+        // ゲームプレイ中のマウス入力処理
+        // 右クリックでポーズメニューを表示
+        if button == 2 {
+            web_sys::console::log_1(&"右クリック: ゲームをポーズします".into());
+            self.current_state = GameStateType::Paused;
+        }
         Ok(())
     }
 
     fn handle_paused_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
-        // TODO: ポーズ中のマウス入力処理
+        // ポーズ中のマウス入力処理
+        // クリックでゲームに戻る
+        web_sys::console::log_1(&"ポーズ画面をクリック: ゲームを再開します".into());
+        self.current_state = GameStateType::Playing;
         Ok(())
     }
 
     fn handle_game_over_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
-        // TODO: ゲームオーバーのマウス入力処理
+        // ゲームオーバー画面のマウス入力処理
+        let canvas_height = self.canvas.height() as f32;
+        
+        // 画面上半分をクリックすると再挑戦
+        if y < canvas_height / 2.0 {
+            web_sys::console::log_1(&"ゲームオーバー画面上部をクリック: リトライします".into());
+            self.current_state = GameStateType::Playing;
+        } else {
+            // 画面下半分をクリックするとメインメニューに戻る
+            web_sys::console::log_1(&"ゲームオーバー画面下部をクリック: メニューに戻ります".into());
+            self.current_state = GameStateType::MainMenu;
+        }
         Ok(())
     }
 }
