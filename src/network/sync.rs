@@ -293,10 +293,26 @@ impl SyncSystem {
         // 実際のメッセージ送信は別のシステムで行われるため、
         // ここではバイト数の計算のみを行う
         
+        // Vec<ComponentData>からHashMap<String, ComponentData>に変換
+        let mut component_map = HashMap::new();
+        for component in snapshot.components {
+            // コンポーネント名を取得（実際の実装ではコンポーネントから名前を取得する必要がある）
+            let name = format!("Component_{}", match component {
+                ComponentData::Position { .. } => "Position",
+                ComponentData::Velocity { .. } => "Velocity",
+                ComponentData::Rotation { .. } => "Rotation",
+                ComponentData::Health { .. } => "Health",
+                ComponentData::Sprite { .. } => "Sprite",
+                ComponentData::PlayerInfo { .. } => "PlayerInfo",
+                ComponentData::Custom { .. } => "Custom",
+            });
+            component_map.insert(name, component);
+        }
+        
         // スナップショットからコンポーネント更新メッセージを作成
         let message = NetworkMessage::new(MessageType::ComponentUpdate)
             .with_entity_id(snapshot.id.try_into().unwrap())
-            .with_components(snapshot.components);
+            .with_components(component_map);
             
         // メッセージのバイト数を計算（簡略化）
         let message_size = serde_json::to_string(&message).unwrap_or_default().len();
@@ -373,7 +389,15 @@ impl System for SyncSystem {
             for component in &snapshot.components {
                 let hash = self.compute_component_hash(component);
                 // コンポーネント名を取得（実際の実装ではコンポーネントから名前を取得する必要がある）
-                let name = format!("Component_{}", component.component_type());
+                let name = format!("Component_{}", match component {
+                    ComponentData::Position { .. } => "Position",
+                    ComponentData::Velocity { .. } => "Velocity",
+                    ComponentData::Rotation { .. } => "Rotation",
+                    ComponentData::Health { .. } => "Health",
+                    ComponentData::Sprite { .. } => "Sprite",
+                    ComponentData::PlayerInfo { .. } => "PlayerInfo",
+                    ComponentData::Custom { .. } => "Custom",
+                });
                 let last_hash = state.last_component_hashes.get(&name).cloned().unwrap_or(0);
                 
                 // ハッシュが変わっていれば変更されたとみなす
