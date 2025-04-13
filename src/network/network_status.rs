@@ -40,7 +40,7 @@ pub enum NetworkQuality {
 }
 
 /// ネットワーク状態を表すリソース
-#[derive(Debug, Clone, Resource)]
+#[derive(Debug, Clone)]
 pub struct NetworkStatus {
     /// 往復時間 (ミリ秒)
     pub rtt: f64,

@@ -223,7 +223,16 @@ impl System for ServerReconciliation {
         // クライアント所有のエンティティを検出
         let owned_entities = self.get_client_owned_entities(world);
         
-        // ネットワーク送信キューを取得
+        // ネットワーク状態を先に確認（不変借用）
+        let mut optimize_for_poor_network = false;
+        {
+            if let Some(network_status) = resources.get::<NetworkStatus>() {
+                optimize_for_poor_network = network_status.bandwidth_status == BandwidthStatus::Limited || 
+                                           network_status.bandwidth_status == BandwidthStatus::Critical;
+            }
+        }
+        
+        // ネットワーク送信キューを取得（可変借用）
         let mut send_queue_opt = resources.get_mut::<NetworkSendQueue>();
         let send_queue = match send_queue_opt {
             Some(ref mut queue) => queue,
@@ -233,9 +242,6 @@ impl System for ServerReconciliation {
                 return Ok(());
             }
         };
-        
-        // ネットワーク状態を確認
-        let network_status_opt = resources.get::<NetworkStatus>();
         
         // 各クライアント所有のエンティティに対して処理
         for (client_id, entity) in owned_entities {
@@ -284,13 +290,10 @@ impl System for ServerReconciliation {
                     // ネットワーク品質が低い場合はスナップショットを最適化
                     let mut optimized_snapshot = snapshot.clone();
                     
-                    // ネットワーク状態を確認
-                    if let Some(network_status) = network_status_opt {
-                        if network_status.bandwidth_status == BandwidthStatus::Limited || 
-                           network_status.bandwidth_status == BandwidthStatus::Critical {
-                            // 限られた帯域幅に対してスナップショットを最適化
-                            self.optimize_snapshot_for_poor_network(&mut optimized_snapshot);
-                        }
+                    // ネットワーク状態に基づいて最適化
+                    if optimize_for_poor_network {
+                        // 限られた帯域幅に対してスナップショットを最適化
+                        self.optimize_snapshot_for_poor_network(&mut optimized_snapshot);
                     }
                     
                     // 修正データをキューに追加

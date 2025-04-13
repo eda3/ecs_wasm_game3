@@ -1,8 +1,13 @@
 use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use crate::ecs::{Component, ComponentManager, Entity, World};
-use crate::ecs::resource::ResourceManager;
+use std::fmt;
+
+use super::entity::{Entity, EntityId};
+use super::component::{Component, ComponentManager};
+use super::resource::{Resource, ResourceManager};
 use wasm_bindgen::JsValue;
+
+use crate::ecs::World;
 
 /// システムの実行フェーズ
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -55,8 +60,8 @@ pub trait System: 'static + Send + Sync {
 pub struct SystemProcessor {
     /// フェーズごとのシステムリスト
     systems: HashMap<SystemPhase, Vec<Box<dyn System>>>,
-    /// リソースのマップ
-    resources: HashMap<TypeId, Box<dyn Any>>,
+    /// リソース管理
+    resource_manager: ResourceManager,
     /// コンポーネント管理
     component_manager: ComponentManager,
 }
@@ -66,7 +71,7 @@ impl SystemProcessor {
     pub fn new() -> Self {
         Self {
             systems: HashMap::new(),
-            resources: HashMap::new(),
+            resource_manager: ResourceManager::new(),
             component_manager: ComponentManager::new(),
         }
     }
@@ -118,7 +123,7 @@ impl SystemProcessor {
     pub fn update_phase(&mut self, phase: SystemPhase, world: &mut World, delta_time: f32) {
         if let Some(systems) = self.systems.get_mut(&phase) {
             for system in systems.iter_mut() {
-                if let Err(e) = system.run(world, self, delta_time) {
+                if let Err(e) = system.run(world, &mut self.resource_manager, delta_time) {
                     log::error!("システムの実行中にエラーが発生: {:?}", e);
                 }
             }
@@ -140,27 +145,23 @@ impl SystemProcessor {
     }
 
     /// リソースを追加または更新
-    pub fn insert_resource<T: 'static + Send + Sync>(&mut self, resource: T) {
-        let type_id = TypeId::of::<T>();
-        self.resources.insert(type_id, Box::new(resource));
+    pub fn insert_resource<T: Resource>(&mut self, resource: T) {
+        self.resource_manager.insert(resource);
     }
 
     /// リソースを取得
-    pub fn get_resource<T: 'static + Send + Sync>(&self) -> Option<&T> {
-        let type_id = TypeId::of::<T>();
-        self.resources.get(&type_id).and_then(|r| r.downcast_ref())
+    pub fn get_resource<T: Resource>(&self) -> Option<&T> {
+        self.resource_manager.get::<T>()
     }
 
     /// リソースを可変で取得
-    pub fn get_resource_mut<T: 'static + Send + Sync>(&mut self) -> Option<&mut T> {
-        let type_id = TypeId::of::<T>();
-        self.resources.get_mut(&type_id).and_then(|r| r.downcast_mut())
+    pub fn get_resource_mut<T: Resource>(&mut self) -> Option<&mut T> {
+        self.resource_manager.get_mut::<T>()
     }
 
     /// リソースを削除
-    pub fn remove_resource<T: 'static + Send + Sync>(&mut self) -> Option<T> {
-        let type_id = TypeId::of::<T>();
-        self.resources.remove(&type_id).and_then(|r| r.downcast().ok().map(|b| *b))
+    pub fn remove_resource<T: Resource>(&mut self) -> Option<T> {
+        self.resource_manager.remove::<T>()
     }
 }
 

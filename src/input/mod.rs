@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use wasm_bindgen::prelude::*;
 use web_sys::KeyboardEvent as WebKeyboardEvent;
 
-use crate::ecs::{Entity, System, World};
+use crate::ecs::{Entity, System, World, SystemPhase, SystemPriority, ResourceManager};
 use crate::ecs::component::Component;
 use crate::ecs::query::Query;
 
@@ -742,7 +742,17 @@ impl System for InputSystem {
         query.run(world)?;
         let entities = query.entities();
         
-        // 各エンティティのアクションハンドラーを実行
+        // 実行するアクションを一時的に保存する構造
+        struct ActionToExecute {
+            entity: Entity,
+            action: String,
+            handler: ActionHandler,
+            value: f32,
+        }
+        
+        // 各エンティティのアクションハンドラーを収集
+        let mut actions_to_execute = Vec::new();
+        
         for entity in entities {
             if let Some(input_component) = world.get_component::<InputComponent>(entity) {
                 if !input_component.is_controllable {
@@ -752,14 +762,31 @@ impl System for InputSystem {
                 for (action, handler) in &input_component.action_handlers {
                     if self.state.action_mapping.is_action_active(action) {
                         let value = self.state.action_mapping.get_action_value(action);
-                        handler(entity, world, value)?;
+                        actions_to_execute.push(ActionToExecute {
+                            entity,
+                            action: action.clone(),
+                            handler: *handler,
+                            value,
+                        });
                     }
                 }
             }
         }
         
+        // 収集したアクションハンドラーを実行
+        for action in actions_to_execute {
+            (action.handler)(action.entity, world, action.value)?;
+        }
+        
         Ok(())
     }
+}
+
+/// 入力システムを初期化
+pub fn init_input_system(world: &mut World) {
+    // 入力システムを作成して登録
+    let input_system = InputSystem::new();
+    world.register_system(input_system);
 }
 
 #[cfg(test)]

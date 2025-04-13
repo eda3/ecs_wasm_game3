@@ -99,6 +99,18 @@ impl Game {
     }
 }
 
+/// ゲームシステムを初期化します。
+pub fn init_game_systems(world: &mut World) {
+    // 各ゲームシステムを初期化して登録
+    use systems::*;
+    
+    // TimeSystemを登録
+    world.register_system(TimeSystem::new());
+    
+    // GameStateSystemを登録
+    world.register_system(GameStateSystem::new());
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
