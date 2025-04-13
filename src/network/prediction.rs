@@ -411,36 +411,62 @@ impl ServerReconciliation {
         // 入力を基にエンティティのコンポーネントを更新
         
         // 位置と速度の更新処理
-        if let Some(mut position) = world.get_component_mut::<PositionComponent>(entity) {
-            if let Some(mut velocity) = world.get_component_mut::<VelocityComponent>(entity) {
-                // 入力に基づいて速度を更新
+        // まず必要なデータを収集
+        let position_update = {
+            let position = world.get_component::<PositionComponent>(entity);
+            let velocity = world.get_component::<VelocityComponent>(entity);
+            
+            if let (Some(position), Some(velocity)) = (position, velocity) {
+                // 入力に基づいた速度と位置の計算
                 let (move_x, move_y) = input.movement;
                 let speed = 5.0; // 適切なスピード係数（ゲームバランスに応じて調整）
                 
-                // 速度を設定
-                velocity.x = move_x * speed;
-                velocity.y = move_y * speed;
+                // 新しい速度値
+                let new_vel_x = move_x * speed;
+                let new_vel_y = move_y * speed;
                 
-                // 速度に基づいて位置を更新
-                position.x += velocity.x * delta_time;
-                position.y += velocity.y * delta_time;
+                // 新しい位置値
+                let new_pos_x = position.x + new_vel_x * delta_time;
+                let new_pos_y = position.y + new_vel_y * delta_time;
                 
-                // Z軸の処理（必要な場合）
-                if let Some(vel_z) = velocity.z {
-                    // Z位置を更新
-                    position.z = position.z.map(|z| z + vel_z * delta_time);
-                    
-                    // 重力など物理シミュレーションの適用（例）
-                    if let Some(z) = position.z {
-                        if z > 0.0 {
-                            velocity.z = Some(vel_z - 9.8 * delta_time); // 重力加速度
-                        } else if z < 0.0 {
-                            // 地面にいる場合
-                            position.z = Some(0.0);
-                            velocity.z = Some(0.0);
-                        }
+                // Z軸の計算（必要な場合）
+                let (new_pos_z, new_vel_z) = if let (Some(pos_z), Some(vel_z)) = (position.z, velocity.z) {
+                    if pos_z > 0.0 {
+                        // 空中にいる場合は重力を適用
+                        let new_vel = vel_z - 9.8 * delta_time; // 重力加速度
+                        let new_pos = pos_z + new_vel * delta_time;
+                        (Some(if new_pos < 0.0 { 0.0 } else { new_pos }), Some(new_vel))
+                    } else {
+                        // 地面にいる場合
+                        (Some(0.0), Some(0.0))
                     }
-                }
+                } else {
+                    (position.z, velocity.z)
+                };
+                
+                Some((
+                    (new_pos_x, new_pos_y, new_pos_z),
+                    (new_vel_x, new_vel_y, new_vel_z)
+                ))
+            } else {
+                None
+            }
+        };
+        
+        // 計算した値で実際にコンポーネントを更新
+        if let Some(((new_pos_x, new_pos_y, new_pos_z), (new_vel_x, new_vel_y, new_vel_z))) = position_update {
+            // 速度の更新
+            if let Some(velocity) = world.get_component_mut::<VelocityComponent>(entity) {
+                velocity.x = new_vel_x;
+                velocity.y = new_vel_y;
+                velocity.z = new_vel_z;
+            }
+            
+            // 位置の更新
+            if let Some(position) = world.get_component_mut::<PositionComponent>(entity) {
+                position.x = new_pos_x;
+                position.y = new_pos_y;
+                position.z = new_pos_z;
             }
         }
         
@@ -451,13 +477,17 @@ impl ServerReconciliation {
                 match action_name.as_str() {
                     "jump" => {
                         // ジャンプ処理
-                        if let Some(mut velocity) = world.get_component_mut::<VelocityComponent>(entity) {
-                            // ジャンプは地面にいる場合のみ有効
-                            if let Some(position) = world.get_component::<PositionComponent>(entity) {
-                                // 地面に近いかチェック
-                                if position.z.map_or(true, |z| z <= 0.01) { // 地面に近い
-                                    velocity.z = Some(10.0); // ジャンプ力
-                                }
+                        // 先に位置情報を確認してからジャンプを適用
+                        let should_jump = {
+                            let position = world.get_component::<PositionComponent>(entity);
+                            // 地面に近いかチェック
+                            position.map_or(false, |pos| pos.z.map_or(true, |z| z <= 0.01))
+                        };
+                        
+                        // ジャンプが可能な場合のみ速度を更新
+                        if should_jump {
+                            if let Some(velocity) = world.get_component_mut::<VelocityComponent>(entity) {
+                                velocity.z = Some(10.0); // ジャンプ力
                             }
                         }
                     },
@@ -1063,14 +1093,20 @@ impl System for InputLatencyCompensationSystem {
         let elapsed = now - self.last_update;
         self.last_update = now;
         
-        // ネットワークリソースを取得
-        let network_resource = match world.get_resource::<NetworkResource>() {
-            Some(resource) => resource,
+        // 先に可変借用が必要な入力リソースを取得
+        let mut input_data = None;
+        if let Some(input_resource) = world.get_resource_mut::<InputResource>() {
+            input_data = Some(input_resource.get_current_input().clone());
+        }
+        
+        // 入力データが取得できなかったら早期リターン
+        let current_input = match input_data {
+            Some(input) => input,
             None => return Ok(()),
         };
         
-        // 入力リソースを取得
-        let input_resource = match world.get_resource_mut::<InputResource>() {
+        // 次に不変借用のネットワークリソースを取得
+        let network_resource = match world.get_resource::<NetworkResource>() {
             Some(resource) => resource,
             None => return Ok(()),
         };
@@ -1080,9 +1116,6 @@ impl System for InputLatencyCompensationSystem {
             Some(entity) => entity,
             None => return Ok(()),
         };
-        
-        // 現在の入力を取得
-        let current_input = input_resource.get_current_input();
         
         // 入力バッファを更新
         self.update_input_buffer(current_input.clone());
