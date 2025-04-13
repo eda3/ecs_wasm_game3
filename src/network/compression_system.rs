@@ -147,10 +147,100 @@ impl NetworkCompressionSystem {
         self.entity_priorities.insert(entity_id, priority);
     }
     
+    /// EntitySnapshotをLocalEntitySnapshotに変換
+    fn convert_to_local_snapshot(&self, snapshot: &EntitySnapshot) -> super::sync::LocalEntitySnapshot {
+        let mut local = super::sync::LocalEntitySnapshot::new(
+            snapshot.entity_id as u64,
+            snapshot.timestamp
+        );
+        
+        // 位置コンポーネントを変換
+        if let Some(pos) = snapshot.components.get("Position") {
+            if let super::messages::ComponentData::Position { x, y, z } = pos {
+                let position = [*x, *y, z.unwrap_or(0.0)];
+                local.position = Some(position);
+            }
+        }
+        
+        // 速度コンポーネントを変換
+        if let Some(vel) = snapshot.components.get("Velocity") {
+            if let super::messages::ComponentData::Velocity { x, y, z } = vel {
+                let velocity = [*x, *y, z.unwrap_or(0.0)];
+                local.velocity = Some(velocity);
+            }
+        }
+        
+        // 回転コンポーネントを変換
+        if let Some(rot) = snapshot.components.get("Rotation") {
+            if let super::messages::ComponentData::Rotation { angle } = rot {
+                // 単一の角度から4次元クォータニオンに変換
+                // 簡略化のため、単純に角度をw成分に設定
+                let rotation = [0.0, 0.0, 0.0, *angle];
+                local.rotation = Some(rotation);
+            }
+        }
+        
+        // 所有者IDを設定
+        if let Some(owner_id) = snapshot.owner_id {
+            let mut extra_data = HashMap::new();
+            extra_data.insert("owner_id".to_string(), serde_json::to_value(owner_id).unwrap());
+            local.extra_data = Some(extra_data);
+        }
+        
+        local
+    }
+    
+    /// LocalEntitySnapshotをEntitySnapshotに戻す変換
+    fn convert_from_local_snapshot(&self, local: &super::sync::LocalEntitySnapshot) -> EntitySnapshot {
+        let mut snapshot = EntitySnapshot::new(
+            local.id as u32,
+            local.timestamp
+        );
+        
+        // 位置データを変換
+        if let Some(position) = &local.position {
+            let pos_component = super::messages::ComponentData::Position {
+                x: position[0],
+                y: position[1],
+                z: if position[2] != 0.0 { Some(position[2]) } else { None }
+            };
+            snapshot.add_component("Position", pos_component);
+        }
+        
+        // 速度データを変換
+        if let Some(velocity) = &local.velocity {
+            let vel_component = super::messages::ComponentData::Velocity {
+                x: velocity[0],
+                y: velocity[1],
+                z: if velocity[2] != 0.0 { Some(velocity[2]) } else { None }
+            };
+            snapshot.add_component("Velocity", vel_component);
+        }
+        
+        // 回転データを変換
+        if let Some(rotation) = &local.rotation {
+            let rot_component = super::messages::ComponentData::Rotation {
+                angle: rotation[3]
+            };
+            snapshot.add_component("Rotation", rot_component);
+        }
+        
+        // 所有者IDを設定
+        if let Some(extra) = &local.extra_data {
+            if let Some(owner_id) = extra.get("owner_id") {
+                if let Ok(id) = serde_json::from_value::<u32>(owner_id.clone()) {
+                    snapshot.set_owner(id);
+                }
+            }
+        }
+        
+        snapshot
+    }
+    
     /// スナップショットを圧縮
     pub fn compress_snapshot(&self, snapshot: &EntitySnapshot) -> EntitySnapshot {
         // エンティティの優先度に基づいて圧縮レベルを調整
-        let priority = self.entity_priorities.get(&snapshot.id)
+        let priority = self.entity_priorities.get(&(snapshot.entity_id as u64))
             .unwrap_or(&EntityPriority::Normal);
             
         // 優先度に基づいた圧縮処理（優先度が高いほど圧縮を軽くする）
@@ -165,7 +255,10 @@ impl NetworkCompressionSystem {
                     // 品質優先モードでは圧縮しない
                     snapshot.clone()
                 } else {
-                    self.compressor.compress(snapshot)
+                    // EntitySnapshot → LocalEntitySnapshot → 圧縮 → EntitySnapshot
+                    let local_snapshot = self.convert_to_local_snapshot(snapshot);
+                    let compressed_local = self.compressor.compress(&local_snapshot);
+                    self.convert_from_local_snapshot(&compressed_local)
                 }
             },
             EntityPriority::Normal => {
@@ -173,23 +266,27 @@ impl NetworkCompressionSystem {
                 if self.adaptive_mode == AdaptiveMode::Fixed {
                     snapshot.clone()
                 } else {
-                    self.compressor.compress(snapshot)
+                    // EntitySnapshot → LocalEntitySnapshot → 圧縮 → EntitySnapshot
+                    let local_snapshot = self.convert_to_local_snapshot(snapshot);
+                    let compressed_local = self.compressor.compress(&local_snapshot);
+                    self.convert_from_local_snapshot(&compressed_local)
                 }
             },
             EntityPriority::Low => {
                 // 低優先度は常に圧縮
-                let compressed = self.compressor.compress(snapshot);
+                let local_snapshot = self.convert_to_local_snapshot(snapshot);
+                let compressed_local = self.compressor.compress(&local_snapshot);
                 
                 // 適応モードが重いほど、さらに情報を間引く
                 if self.adaptive_mode == AdaptiveMode::QualityPriority {
                     // 最大圧縮モードでは速度情報を完全に削除
-                    let mut extra_compressed = compressed.clone();
+                    let mut extra_compressed = compressed_local.clone();
                     extra_compressed.velocity = None;
                     // 遠くのオブジェクトは追加データも削除
                     extra_compressed.extra_data = None;
-                    extra_compressed
+                    self.convert_from_local_snapshot(&extra_compressed)
                 } else {
-                    compressed
+                    self.convert_from_local_snapshot(&compressed_local)
                 }
             },
             EntityPriority::VeryLow => {
