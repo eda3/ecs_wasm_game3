@@ -265,9 +265,11 @@ impl NetworkSystem {
     
     pub fn start_game(&self) -> Result<(), JsValue> { ... }
     
-    pub fn reveal_cell(&self, pos: Position) -> Result<(), JsValue> { ... }
+    pub fn reveal_cell(&self, x: u8, y: u8) -> Result<(), JsValue> { ... }
     
-    pub fn toggle_flag(&self, pos: Position) -> Result<(), JsValue> { ... }
+    pub fn toggle_flag(&self, x: u8, y: u8) -> Result<(), JsValue> { ... }
+    
+    pub fn chord_action(&self, x: u8, y: u8) -> Result<(), JsValue> { ... }
     
     pub fn send_chat_message(&self, content: &str) -> Result<(), JsValue> { ... }
 }
@@ -321,75 +323,170 @@ impl UiSystem {
 #[derive(Serialize)]
 pub enum ClientMessage {
     JoinRoom {
+        room_id: String,
         player_name: String,
-        room_code: String,
     },
     CreateRoom {
         player_name: String,
         game_mode: GameMode,
         difficulty: Difficulty,
-    },
-    Ready {
-        ready: bool,
-    },
-    StartGame,
-    RevealCell {
-        position: Position,
-    },
-    ToggleFlag {
-        position: Position,
-    },
-    ChatMessage {
-        content: String,
+        custom_settings: Option<CustomSettings>,
     },
     LeaveRoom,
+    StartGame,
+    Ping {
+        timestamp: u64,
+    },
+    RevealCell {
+        x: u8,
+        y: u8,
+    },
+    ToggleFlag {
+        x: u8,
+        y: u8,
+    },
+    ChordAction {
+        x: u8,
+        y: u8,
+    },
+    ChatMessage {
+        message: String,
+    },
+    PlayerReady {
+        ready: bool,
+    },
+}
+
+// Position型の代わりにx,yを直接使用する
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CustomSettings {
+    pub width: u8,
+    pub height: u8,
+    pub mines: u16,
 }
 
 // サーバーからクライアントへのメッセージ
 #[derive(Deserialize)]
 pub enum ServerMessage {
     Welcome {
-        client_id: Uuid,
-    },
-    RoomCreated {
-        room_id: Uuid,
-        room_code: String,
+        player_id: String,
+        server_time: u64,
     },
     RoomJoined {
-        room_info: RoomInfo,
+        room_id: String,
+        game_mode: GameMode,
+        difficulty: String,
+        custom_settings: Option<CustomSettings>,
+        players: Vec<PlayerInfo>,
+    },
+    RoomCreated {
+        room_id: String,
+        game_mode: GameMode,
+        difficulty: String,
+        custom_settings: Option<CustomSettings>,
     },
     PlayerJoined {
-        player: Player,
+        player: PlayerInfo,
     },
     PlayerLeft {
-        player_id: PlayerId,
-    },
-    PlayerReady {
-        player_id: PlayerId,
-        ready: bool,
+        player_id: String,
     },
     GameStarted {
-        game_info: GameInfo,
+        board_id: String,
+        start_time: u64,
+        board: BoardInfo,
+    },
+    Pong {
+        timestamp: u64,
+        server_time: u64,
     },
     CellRevealed {
-        positions: Vec<Position>,
-        revealed_by: PlayerId,
+        player_id: String,
+        x: u8,
+        y: u8,
+        value: i8, // -1は地雷
+        revealed_cells: Vec<CellInfo>,
     },
-    CellFlagged {
-        position: Position,
-        flagged: bool,
-        flagged_by: PlayerId,
+    FlagToggled {
+        player_id: String,
+        x: u8,
+        y: u8,
+        is_flagged: bool,
     },
-    ChatBroadcast {
-        message: ChatMessage,
+    ChordPerformed {
+        player_id: String,
+        x: u8,
+        y: u8,
+        revealed_cells: Vec<CellInfo>,
     },
     GameOver {
-        result: GameResult,
+        result: String, // "defeat"
+        cause_player_id: String,
+        mine_location: CellPosition,
+        all_mines: Vec<CellPosition>,
+        scores: Vec<PlayerScore>,
+        game_time: u32,
+    },
+    GameWon {
+        scores: Vec<PlayerScore>,
+        game_time: u32,
+        winner: Option<String>, // 競争モードでのみ存在
+    },
+    ChatReceived {
+        player_id: String,
+        player_name: String,
+        message: String,
+        timestamp: u64,
+    },
+    PlayerReadyChanged {
+        player_id: String,
+        ready: bool,
     },
     Error {
-        code: ErrorCode,
+        code: String,
         message: String,
     },
+    SystemMessage {
+        message_type: String, // "INFO" または "WARNING"
+        message: String,
+        timestamp: u64,
+    },
+}
+
+#[derive(Deserialize)]
+pub struct PlayerInfo {
+    pub id: String,
+    pub name: String,
+    pub is_host: bool,
+    pub ready: bool,
+}
+
+#[derive(Deserialize)]
+pub struct BoardInfo {
+    pub width: u8,
+    pub height: u8,
+    pub mine_count: u16,
+    pub cells: Option<Vec<Vec<i8>>>, // 協力モードでのみ初期ボードが送られる
+}
+
+#[derive(Deserialize)]
+pub struct CellInfo {
+    pub x: u8,
+    pub y: u8,
+    pub value: i8,
+}
+
+#[derive(Deserialize)]
+pub struct CellPosition {
+    pub x: u8,
+    pub y: u8,
+}
+
+#[derive(Deserialize)]
+pub struct PlayerScore {
+    pub player_id: String,
+    pub name: String,
+    pub score: u32,
 }
 ```
 
@@ -473,36 +570,41 @@ fn game_play_update(app: &mut MinesweeperApp, delta_time: f32) -> Result<(), JsV
 ### ユーザー入力処理
 ```rust
 fn handle_click(app: &mut MinesweeperApp, x: i32, y: i32, button: MouseButton) -> Result<(), JsValue> {
-    match app.state {
+    // 現在の状態に基づいて処理を分岐
+    match &app.state {
         AppState::Game(ref game_info) => {
             // クリック位置をゲームボード上の位置に変換
             if let Some(position) = app.renderer.screen_to_board_position(x, y) {
-                match button {
-                    // 左クリック: セルを開く
-                    MouseButton::Left => {
-                        app.network.reveal_cell(position)?;
-                    },
-                    // 右クリック: 旗を切り替える
-                    MouseButton::Right => {
-                        app.network.toggle_flag(position)?;
-                    },
-                    // 中クリック: 周囲のセルを開く（プレイヤーIDは効かない）
-                    MouseButton::Middle => {
-                        // 数字セルの場合、周囲に正確な数の旗があれば周囲のセルを開く
-                        // これはサーバーで処理するため、開く操作を送信するだけ
-                        app.network.chord_cell(position)?;
-                    },
+                // 操作タイプを決定
+                let action = match button {
+                    MouseButton::Left => NetworkAction::RevealCell { x: position.x, y: position.y },
+                    MouseButton::Right => NetworkAction::ToggleFlag { x: position.x, y: position.y },
+                    MouseButton::Middle => NetworkAction::ChordAction { x: position.x, y: position.y },
+                };
+                
+                // 状態判定が終わった後でネットワークアクションを実行
+                match action {
+                    NetworkAction::RevealCell { x, y } => app.network.reveal_cell(x, y)?,
+                    NetworkAction::ToggleFlag { x, y } => app.network.toggle_flag(x, y)?,
+                    NetworkAction::ChordAction { x, y } => app.network.chord_action(x, y)?,
                 }
             }
         },
         // その他の状態でのクリック処理...
         _ => {
-            // UIイベントを適切に処理
+            // 状態の可変参照が必要なため、matchの外で処理
             app.ui.handle_click(x, y, button, &mut app.state)?;
         }
     }
     
     Ok(())
+}
+
+// ネットワークアクションを表す列挙型
+enum NetworkAction {
+    RevealCell { x: u8, y: u8 },
+    ToggleFlag { x: u8, y: u8 },
+    ChordAction { x: u8, y: u8 },
 }
 ```
 
