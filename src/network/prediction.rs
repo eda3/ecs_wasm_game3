@@ -579,8 +579,7 @@ impl ServerReconciliation {
     /// エンティティのスナップショットを作成
     fn create_entity_snapshot(&self, world: &World, entity: Entity, timestamp: f64) -> EntitySnapshot {
         // 新しいスナップショットを作成
-        let mut snapshot = EntitySnapshot::new(entity.id().0);
-        snapshot.timestamp = timestamp;
+        let mut snapshot = EntitySnapshot::new(entity.id().0, timestamp);
         
         // コンポーネントデータを収集
         let mut components = HashMap::new();
