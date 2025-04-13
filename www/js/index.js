@@ -15,9 +15,38 @@ let animationFrameId = null;
 // ページ読み込み時の初期化
 async function init() {
     try {
-        // Wasmモジュールをロード
-        gameModule = await import('./ecs_wasm_game2.js');
-        await gameModule.default();
+        console.log('🔄 Wasmモジュールをロード中...');
+
+        // Wasmモジュールをロード前に環境チェック
+        if (typeof window.FinalizationRegistry === 'undefined') {
+            console.warn('⚠️ FinalizationRegistryがサポートされていません。ポリフィルを使用します。');
+            // 簡易的なポリフィル
+            window.FinalizationRegistry = class {
+                constructor(callback) { this.callback = callback; }
+                register(obj, value) { /* ポリフィル実装 */ }
+                unregister(obj) { /* ポリフィル実装 */ }
+            };
+        }
+
+        // wasm_bindgen内部のためのグローバル関数を追加
+        window.__wbg_function_table = [];
+        window.__wbindgen_export_2 = { set: function (idx, obj) { window.__wbg_function_table[idx] = obj; } };
+
+        try {
+            // Wasmモジュールをロード
+            gameModule = await import('./ecs_wasm_game2.js');
+            await gameModule.default();
+            console.log('✅ Wasmモジュールのロードに成功しました');
+        } catch (moduleError) {
+            console.error('❌ Wasmモジュールのロード中にエラーが発生しました:', moduleError);
+
+            // エラーメッセージをUI上に表示
+            const debugInfo = document.getElementById('debug-info');
+            if (debugInfo) {
+                debugInfo.innerHTML = `<p class="error">モジュールロードエラー: ${moduleError.message}</p>`;
+            }
+            throw moduleError;
+        }
 
         // ゲームロガーを初期化
         gameModule.wasm_logger_init();
@@ -31,9 +60,19 @@ async function init() {
         setupEventListeners();
 
         // ゲームインスタンスを初期化
-        gameInstance = gameModule.initialize_game('game-canvas');
+        try {
+            gameInstance = gameModule.initialize_game('game-canvas');
+            console.log('🚀 Game initialized successfully!');
+        } catch (initError) {
+            console.error('💥 Failed to initialize game instance:', initError);
 
-        console.log('🚀 Game initialized successfully!');
+            // エラーメッセージをUI上に表示
+            const debugInfo = document.getElementById('debug-info');
+            if (debugInfo) {
+                debugInfo.innerHTML = `<p class="error">初期化エラー: ${initError.message}</p>`;
+            }
+            throw initError;
+        }
 
         // ゲームループを開始
         startGameLoop();
