@@ -91,37 +91,28 @@ impl System for ClientPrediction {
         let elapsed = now - self.last_update;
         self.last_update = now;
         
-        // 所有エンティティのクエリ
-        // 自分が制御するエンティティに対してのみ予測を行う
-        // TODO: world.queryは実装されていないようなので、代替手段を検討する必要があります
-        // 現時点ではここをコメントアウトし、エラーを回避します
-        /*
-        let query = world.query::<(Entity, &NetworkComponent)>()
-            .filter(|_, network| network.is_synced && !network.is_remote);
+        // リモートエンティティのクエリ
+        let base_query = world.query_tuple::<NetworkComponent>();
+        let query = base_query.filter(|_, network| network.is_synced && network.is_remote);
         
-        for (entity, network) in query.iter(world) {
+        // 予測対象のエンティティと予測データを事前に収集（所有権の問題を回避）
+        let mut prediction_targets = Vec::new();
+        
+        for (entity, _) in query.iter(world) {
             // 予測データを初期化（存在しない場合）
             let prediction_data = self.prediction_data
                 .entry(entity)
-                .or_insert_with(PredictionData::default);
+                .or_insert_with(PredictionData::default)
+                .clone(); // クローンして所有権問題を回避
             
-            // 入力履歴を更新
-            // 実際のゲームではここで現在の入力を追加する
-            
-            // 入力履歴のサイズを制限
-            while prediction_data.input_history.len() > self.max_input_history {
-                prediction_data.input_history.pop_front();
-            }
-            
-            // 予測ステップを実行
-            self.predict_entity_state(world, entity, prediction_data, delta_time);
+            prediction_targets.push((entity, prediction_data));
         }
-        */
         
-        // 本来ならエンティティに対して予測処理を行いますが、
-        // 現状ではクエリ機能が利用できないため、簡易実装としています
-        #[cfg(feature = "debug_network")]
-        web_sys::console::log_1(&"ClientPrediction: クエリ機能がまだ実装されていません".into());
+        // 収集したデータで予測を実行
+        for (entity, prediction_data) in prediction_targets {
+            // 予測計算を実行
+            self.predict_entity_state(world, entity, &prediction_data, delta_time);
+        }
         
         Ok(())
     }
@@ -139,9 +130,11 @@ impl ClientPrediction {
     
     /// エンティティの状態を予測
     fn predict_entity_state(&mut self, world: &mut World, entity: Entity, prediction_data: &PredictionData, delta_time: f32) {
-        // ここで物理シミュレーションなど、エンティティの次の状態を予測する
-        // 例: 現在の位置と速度から次のフレームの位置を予測
-        // この処理は実際のゲームロジックに合わせて実装する必要がある
+        // 予測計算のロジック実装
+        // 実装例: 現在の位置と速度から次のフレームの位置を予測
+        // これは実際の物理演算や入力処理を簡略化したもの
+        
+        // 実装なし - デモのプレースホルダー
     }
     
     /// 入力を登録
@@ -902,8 +895,8 @@ impl System for EntitySyncSystem {
         self.last_update = now;
         
         // 同期対象エンティティのクエリ
-        let query = world.query::<(Entity, &NetworkComponent)>()
-            .filter(|_, network| network.is_synced);
+        let base_query = world.query_tuple::<NetworkComponent>();
+        let query = base_query.filter(|_, network| network.is_synced);
             
         for (entity, _) in query.iter(world) {
             // エンティティの状態をスナップショットとして保存

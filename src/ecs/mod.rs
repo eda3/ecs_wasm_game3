@@ -222,6 +222,33 @@ impl World {
         query
     }
 
+    /// タプル型(Entity, &T)の特殊クエリを生成
+    /// 
+    /// 標準のComponentトレイトを実装していないタプル型に対する特殊処理を提供します。
+    /// これにより、タプル型に対するquery::filterメソッドの呼び出しが可能になります。
+    ///
+    /// # 例
+    ///
+    /// ```
+    /// let query = world.query_tuple::<NetworkComponent>()
+    ///     .filter(|_, network| network.is_synced && network.is_remote);
+    /// ```
+    pub fn query_tuple<T>(&self) -> query::EntityComponentQuery<T>
+    where
+        T: 'static + component::Component,
+    {
+        let mut query = query::EntityComponentQuery::new();
+        
+        // すべてのエンティティをクエリに追加
+        for entity in self.entities() {
+            if self.get_component::<T>(entity).is_some() {
+                query.add_entity(entity);
+            }
+        }
+        
+        query
+    }
+
     /// 特定のコンポーネントを持つすべてのエンティティを取得
     ///
     /// 指定されたコンポーネント型を持つエンティティのIDリストを返します。

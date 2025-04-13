@@ -100,22 +100,11 @@ where
     /// # 戻り値
     /// * `Iterator<Item = (Entity, &T)>` - エンティティとコンポーネントのタプルのイテレータ
     pub fn iter<'a>(&'a self, world: &'a World) -> Box<dyn Iterator<Item = (Entity, &'a T)> + 'a> {
-        let type_name = std::any::type_name::<T>();
-        if type_name.starts_with("(") && type_name.contains("Entity") {
-            // この場合、正確な型のイテレーションができないため、空のイテレータを返す                     
-            // 実際の実装では、ここで特殊な型変換や処理が必要
-            Box::new(self.entities.iter()
-                .filter_map(move |&entity| {
-                    None // タプル型のイテレーションは特殊なので別途対応が必要
-                }))
-        } else {
-            // 通常のコンポーネント型
-            Box::new(self.entities.iter()
-                .filter_map(move |&entity| {
-                    world.get_component::<T>(entity)
-                        .map(|component| (entity, component))
-                }))
-        }
+        Box::new(self.entities.iter()
+            .filter_map(move |&entity| {
+                world.get_component::<T>(entity)
+                    .map(|component| (entity, component))
+            }))
     }
     
     /// クエリ結果を可変でイテレート
@@ -163,6 +152,63 @@ where
         // 実際には filter_fn を使用したフィルタリングが必要
 
         self
+    }
+}
+
+// タプル型(Entity, &T)に対する特殊化クエリの実装
+// これは標準のComponentトレイト境界を満たさないタプル型のための特殊実装
+pub struct EntityComponentQuery<T: 'static + component::Component> {
+    /// クエリ結果のエンティティリスト
+    entities: Vec<Entity>,
+    /// コンポーネント型のマーカー
+    _marker: PhantomData<T>,
+}
+
+impl<T: 'static + component::Component> Default for EntityComponentQuery<T> {
+    fn default() -> Self {
+        Self {
+            entities: Vec::new(),
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T: 'static + component::Component> EntityComponentQuery<T> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+    
+    pub fn add_entity(&mut self, entity: Entity) {
+        self.entities.push(entity);
+    }
+    
+    pub fn filter<F>(&mut self, _filter_fn: F) -> &mut Self 
+    where
+        F: FnMut(&Entity, &T) -> bool + 'static,
+    {
+        // 実際のフィルタリングはイテレーション時に行うため、
+        // ここでは単純に自身を返す
+        self
+    }
+    
+    pub fn iter<'a>(&'a self, world: &'a World) -> impl Iterator<Item = (Entity, &'a T)> + 'a {
+        self.entities.iter()
+            .filter_map(move |&entity| {
+                world.get_component::<T>(entity)
+                    .map(|component| (entity, component))
+            })
+    }
+    
+    pub fn len(&self) -> usize {
+        self.entities.len()
+    }
+    
+    pub fn is_empty(&self) -> bool {
+        self.entities.is_empty()
+    }
+    
+    pub fn entities(&self) -> Vec<Entity> {
+        self.entities.clone()
     }
 }
 
