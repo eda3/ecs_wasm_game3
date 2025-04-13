@@ -426,31 +426,30 @@ impl ServerReconciliation {
         if let Some(mut position) = world.get_component_mut::<PositionComponent>(entity) {
             if let Some(mut velocity) = world.get_component_mut::<VelocityComponent>(entity) {
                 // 入力に基づいて速度を更新
-                if let Some((move_x, move_y)) = input.movement {
-                    let speed = 5.0; // 適切なスピード係数（ゲームバランスに応じて調整）
+                let (move_x, move_y) = input.movement;
+                let speed = 5.0; // 適切なスピード係数（ゲームバランスに応じて調整）
+                
+                // 速度を設定
+                velocity.x = move_x * speed;
+                velocity.y = move_y * speed;
+                
+                // 速度に基づいて位置を更新
+                position.x += velocity.x * delta_time;
+                position.y += velocity.y * delta_time;
+                
+                // Z軸の処理（必要な場合）
+                if let Some(vel_z) = velocity.z {
+                    // Z位置を更新
+                    position.z = position.z.map(|z| z + vel_z * delta_time);
                     
-                    // 速度を設定
-                    velocity.x = move_x * speed;
-                    velocity.y = move_y * speed;
-                    
-                    // 速度に基づいて位置を更新
-                    position.x += velocity.x * delta_time;
-                    position.y += velocity.y * delta_time;
-                    
-                    // Z軸の処理（必要な場合）
-                    if let Some(vel_z) = velocity.z {
-                        // Z位置を更新
-                        position.z = position.z.map(|z| z + vel_z * delta_time);
-                        
-                        // 重力など物理シミュレーションの適用（例）
-                        if let Some(z) = position.z {
-                            if z > 0.0 {
-                                velocity.z = Some(vel_z - 9.8 * delta_time); // 重力加速度
-                            } else if z < 0.0 {
-                                // 地面にいる場合
-                                position.z = Some(0.0);
-                                velocity.z = Some(0.0);
-                            }
+                    // 重力など物理シミュレーションの適用（例）
+                    if let Some(z) = position.z {
+                        if z > 0.0 {
+                            velocity.z = Some(vel_z - 9.8 * delta_time); // 重力加速度
+                        } else if z < 0.0 {
+                            // 地面にいる場合
+                            position.z = Some(0.0);
+                            velocity.z = Some(0.0);
                         }
                     }
                 }
@@ -1212,27 +1211,26 @@ impl InputLatencyCompensationSystem {
         let mut predicted_input = input3.clone();
         
         // 移動入力の予測
-        if let (Some(m1), Some(m2), Some(m3)) = (input1.movement, input2.movement, input3.movement) {
-            // 2つの差分から次の移動を予測
-            let dx1 = m2.0 - m1.0;
-            let dy1 = m2.1 - m1.1;
-            let dx2 = m3.0 - m2.0;
-            let dy2 = m3.1 - m2.1;
-            
-            // 加速度を計算
-            let ax = dx2 - dx1;
-            let ay = dy2 - dy1;
-            
-            // 予測移動値
-            let px = m3.0 + dx2 + ax * 0.5;
-            let py = m3.1 + dy2 + ay * 0.5;
-            
-            // 値を-1.0〜1.0の範囲に制限
-            let px = px.max(-1.0).min(1.0);
-            let py = py.max(-1.0).min(1.0);
-            
-            predicted_input.movement = Some((px, py));
-        }
+        let (m1, m2, m3) = (input1.movement, input2.movement, input3.movement);
+        // 2つの差分から次の移動を予測
+        let dx1 = m2.0 - m1.0;
+        let dy1 = m2.1 - m1.1;
+        let dx2 = m3.0 - m2.0;
+        let dy2 = m3.1 - m2.1;
+        
+        // 加速度を計算
+        let ax = dx2 - dx1;
+        let ay = dy2 - dy1;
+        
+        // 予測移動値
+        let px = m3.0 + dx2 + ax * 0.5;
+        let py = m3.1 + dy2 + ay * 0.5;
+        
+        // 値を-1.0〜1.0の範囲に制限
+        let px = px.max(-1.0).min(1.0);
+        let py = py.max(-1.0).min(1.0);
+        
+        predicted_input.movement = (px, py);
         
         // アクション入力の予測（単純に最新を使用）
         
@@ -1252,11 +1250,10 @@ impl InputLatencyCompensationSystem {
         let mut interpolated_input = input2.clone();
         
         // 移動入力の補間
-        if let (Some(m1), Some(m2)) = (input1.movement, input2.movement) {
-            let x = m1.0 + (m2.0 - m1.0) * t;
-            let y = m1.1 + (m2.1 - m1.1) * t;
-            interpolated_input.movement = Some((x, y));
-        }
+        let (m1, m2) = (input1.movement, input2.movement);
+        let x = m1.0 + (m2.0 - m1.0) * t;
+        let y = m1.1 + (m2.1 - m1.1) * t;
+        interpolated_input.movement = (x, y);
         
         // アクション入力は最新を使用（ボタン入力は通常補間しない）
         
