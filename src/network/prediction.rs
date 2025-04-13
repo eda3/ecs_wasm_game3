@@ -86,31 +86,21 @@ impl System for ClientPrediction {
     }
     
     fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
-        // 前回の更新からの経過時間
         let now = Date::now();
         let elapsed = now - self.last_update;
         self.last_update = now;
         
-        // リモートエンティティのクエリ
-        let base_query = world.query_tuple::<NetworkComponent>();
+        // リモートエンティティのクエリ - query_tupleを使用して修正
+        let mut base_query = world.query_tuple::<NetworkComponent>();
         let query = base_query.filter(|_, network| network.is_synced && network.is_remote);
-        
-        // 予測対象のエンティティと予測データを事前に収集（所有権の問題を回避）
-        let mut prediction_targets = Vec::new();
-        
-        for (entity, _) in query.iter(world) {
+            
+        for (entity, network) in query.iter(world) {
             // 予測データを初期化（存在しない場合）
             let prediction_data = self.prediction_data
                 .entry(entity)
                 .or_insert_with(PredictionData::default)
                 .clone(); // クローンして所有権問題を回避
             
-            prediction_targets.push((entity, prediction_data));
-        }
-        
-        // 収集したデータで予測を実行
-        for (entity, prediction_data) in prediction_targets {
-            // 予測計算を実行
             self.predict_entity_state(world, entity, &prediction_data, delta_time);
         }
         
@@ -209,7 +199,6 @@ impl System for ServerReconciliation {
     }
     
     fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
-        // 現在の時刻を取得
         let now = Date::now();
         self.last_update = now;
         
@@ -834,9 +823,9 @@ impl System for InterpolationSystem {
         let elapsed = now - self.last_update;
         self.last_update = now;
         
-        // リモートエンティティのクエリ
-        let query = world.query::<(Entity, &NetworkComponent)>()
-            .filter(|_, network| network.is_synced && network.is_remote);
+        // リモートエンティティのクエリ - query_tupleを使用して修正
+        let mut base_query = world.query_tuple::<NetworkComponent>();
+        let query = base_query.filter(|_, network| network.is_synced && network.is_remote);
             
         for (entity, network) in query.iter(world) {
             // このエンティティの過去のスナップショットを取得
@@ -894,8 +883,8 @@ impl System for EntitySyncSystem {
         let now = Date::now();
         self.last_update = now;
         
-        // 同期対象エンティティのクエリ
-        let base_query = world.query_tuple::<NetworkComponent>();
+        // 同期対象エンティティのクエリ - mutキーワードを追加して修正
+        let mut base_query = world.query_tuple::<NetworkComponent>();
         let query = base_query.filter(|_, network| network.is_synced);
             
         for (entity, _) in query.iter(world) {
