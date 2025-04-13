@@ -1,7 +1,7 @@
-# マルチプレイヤーマインスイーパー クライアントアーキテクチャ設計 🎮
+# マルチプレイヤーゲームフレームワーク クライアントアーキテクチャ設計 🎮
 
 ## 概要
-本ドキュメントでは、マルチプレイヤーマインスイーパーのクライアントサイド実装に関する詳細な設計を記述します。クライアントはRustで実装され、WebAssembly (Wasm)にコンパイルされてブラウザで実行されます。
+本ドキュメントでは、マルチプレイヤーゲームフレームワークのクライアントサイド実装に関する詳細な設計を記述します。クライアントはRustで実装され、WebAssembly (Wasm)にコンパイルされてブラウザで実行されます。
 
 ## アーキテクチャ
 
@@ -53,7 +53,7 @@ pub fn start() -> Result<(), JsValue> {
     console_log::init_with_level(log::Level::Debug).unwrap();
     
     // ゲームアプリケーションの初期化
-    let app = MinesweeperApp::new()?;
+    let app = GameApp::new()?;
     
     // グローバルスコープにアプリインスタンスを保存
     set_app_instance(app);
@@ -62,11 +62,11 @@ pub fn start() -> Result<(), JsValue> {
 }
 ```
 
-### MinesweeperApp
+### GameApp
 アプリケーションのメインコンポーネントで、全体の状態とロジックを管理します。
 
 ```rust
-pub struct MinesweeperApp {
+pub struct GameApp {
     // アプリの状態
     state: AppState,
     // ゲームシステム
@@ -83,7 +83,7 @@ pub struct MinesweeperApp {
     world: World,
 }
 
-impl MinesweeperApp {
+impl GameApp {
     pub fn new() -> Result<Self, JsValue> { ... }
     
     pub fn update(&mut self, delta_time: f32) -> Result<(), JsValue> { ... }
@@ -94,7 +94,7 @@ impl MinesweeperApp {
     
     pub fn connect_to_server(&mut self, url: &str) -> Result<(), JsValue> { ... }
     
-    pub fn create_game_room(&mut self, player_name: &str, mode: GameMode, difficulty: Difficulty) -> Result<(), JsValue> { ... }
+    pub fn create_game_room(&mut self, player_name: &str, game_type: GameType, options: GameOptions) -> Result<(), JsValue> { ... }
     
     pub fn join_game_room(&mut self, player_name: &str, room_code: &str) -> Result<(), JsValue> { ... }
 }
@@ -108,8 +108,8 @@ impl MinesweeperApp {
 pub enum AppState {
     Loading,
     MainMenu,
-    ModeSelect,
-    DifficultySelect,
+    GameTypeSelect,
+    OptionsSelect,
     RoomCreation,
     RoomJoin,
     Lobby(RoomInfo),
@@ -131,23 +131,22 @@ Rustの既存のECSフレームワークを活用して、ゲームロジック�
 // コンポーネント定義
 #[derive(Component)]
 pub struct Position {
-    pub x: u8,
-    pub y: u8,
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Component)]
-pub struct Cell {
-    pub is_mine: bool,
-    pub is_revealed: bool,
-    pub is_flagged: bool,
-    pub adjacent_mines: u8,
+pub struct GameObject {
+    pub object_type: ObjectType,
+    pub state: GameObjectState,
+    pub properties: HashMap<String, Value>,
 }
 
 #[derive(Component)]
-pub struct Board {
-    pub width: u8,
-    pub height: u8,
-    pub mine_count: u32,
+pub struct GameBoard {
+    pub width: u32,
+    pub height: u32,
+    pub config: GameBoardConfig,
 }
 
 #[derive(Component)]
@@ -156,18 +155,19 @@ pub struct PlayerOwned {
 }
 
 // システム定義
-pub fn reveal_cell_system(
+pub fn interact_with_object_system(
     world: &mut World,
-    board_query: Query<&Board>,
-    mut cell_query: Query<(&Position, &mut Cell)>,
+    board_query: Query<&GameBoard>,
+    mut object_query: Query<(&Position, &mut GameObject)>,
     pos: Position,
     player_id: PlayerId,
-) -> Result<Vec<Position>, GameError> { ... }
+    action_type: ActionType,
+) -> Result<Vec<GameEvent>, GameError> { ... }
 
-pub fn toggle_flag_system(
+pub fn toggle_object_state_system(
     world: &mut World,
-    board_query: Query<&Board>,
-    mut cell_query: Query<(&Position, &mut Cell)>,
+    board_query: Query<&GameBoard>,
+    mut object_query: Query<(&Position, &mut GameObject)>,
     pos: Position,
     player_id: PlayerId,
 ) -> Result<bool, GameError> { ... }
@@ -182,9 +182,9 @@ pub struct RenderSystem {
     canvas: HtmlCanvasElement,
     context: CanvasRenderingContext2d,
     sprites: HashMap<SpriteType, HtmlImageElement>,
-    cell_size: u32,
-    board_offset_x: u32,
-    board_offset_y: u32,
+    object_size: f32,
+    board_offset_x: f32,
+    board_offset_y: f32,
 }
 
 impl RenderSystem {
@@ -194,11 +194,11 @@ impl RenderSystem {
     
     pub fn render_board(&self, world: &World) -> Result<(), JsValue> { ... }
     
-    pub fn render_cell(&self, cell: &Cell, position: &Position, player_color: Option<[u8; 4]>) -> Result<(), JsValue> { ... }
+    pub fn render_game_object(&self, object: &GameObject, position: &Position, player_color: Option<[u8; 4]>) -> Result<(), JsValue> { ... }
     
     pub fn render_ui(&self, app_state: &AppState) -> Result<(), JsValue> { ... }
     
-    pub fn screen_to_board_position(&self, screen_x: i32, screen_y: i32) -> Option<Position> { ... }
+    pub fn screen_to_board_position(&self, screen_x: f32, screen_y: f32) -> Option<Position> { ... }
 }
 ```
 
@@ -208,22 +208,29 @@ impl RenderSystem {
 
 ```rust
 pub struct InputSystem {
-    mouse_position: (i32, i32),
+    mouse_position: (f32, f32),
     mouse_buttons: [bool; 3],
     keyboard_state: HashMap<String, bool>,
+    touch_state: Vec<TouchPoint>,
     event_listeners: Vec<EventListener>,
 }
 
 impl InputSystem {
     pub fn new() -> Result<Self, JsValue> { ... }
     
-    pub fn setup_listeners(&mut self, app: Rc<RefCell<MinesweeperApp>>) -> Result<(), JsValue> { ... }
+    pub fn setup_listeners(&mut self, app: Rc<RefCell<GameApp>>) -> Result<(), JsValue> { ... }
     
     pub fn handle_mouse_down(&mut self, event: &MouseEvent) -> Result<(), JsValue> { ... }
     
     pub fn handle_mouse_up(&mut self, event: &MouseEvent) -> Result<(), JsValue> { ... }
     
     pub fn handle_mouse_move(&mut self, event: &MouseEvent) -> Result<(), JsValue> { ... }
+    
+    pub fn handle_touch_start(&mut self, event: &TouchEvent) -> Result<(), JsValue> { ... }
+    
+    pub fn handle_touch_end(&mut self, event: &TouchEvent) -> Result<(), JsValue> { ... }
+    
+    pub fn handle_touch_move(&mut self, event: &TouchEvent) -> Result<(), JsValue> { ... }
     
     pub fn handle_key_down(&mut self, event: &KeyboardEvent) -> Result<(), JsValue> { ... }
     
@@ -253,9 +260,9 @@ impl NetworkSystem {
     
     pub fn send_message(&self, message: ClientMessage) -> Result<(), JsValue> { ... }
     
-    pub fn process_messages(&mut self, app: &mut MinesweeperApp) -> Result<(), JsValue> { ... }
+    pub fn process_messages(&mut self, app: &mut GameApp) -> Result<(), JsValue> { ... }
     
-    pub fn create_room(&self, player_name: &str, game_mode: GameMode, difficulty: Difficulty) -> Result<(), JsValue> { ... }
+    pub fn create_room(&self, player_name: &str, game_type: GameType, options: GameOptions) -> Result<(), JsValue> { ... }
     
     pub fn join_room(&self, player_name: &str, room_code: &str) -> Result<(), JsValue> { ... }
     
@@ -265,11 +272,7 @@ impl NetworkSystem {
     
     pub fn start_game(&self) -> Result<(), JsValue> { ... }
     
-    pub fn reveal_cell(&self, x: u8, y: u8) -> Result<(), JsValue> { ... }
-    
-    pub fn toggle_flag(&self, x: u8, y: u8) -> Result<(), JsValue> { ... }
-    
-    pub fn chord_action(&self, x: u8, y: u8) -> Result<(), JsValue> { ... }
+    pub fn perform_action(&self, action_type: ActionType, x: f32, y: f32, params: Option<ActionParams>) -> Result<(), JsValue> { ... }
     
     pub fn send_chat_message(&self, content: &str) -> Result<(), JsValue> { ... }
 }
@@ -292,9 +295,9 @@ impl UiSystem {
     
     pub fn show_main_menu(&mut self) -> Result<(), JsValue> { ... }
     
-    pub fn show_mode_select(&mut self) -> Result<(), JsValue> { ... }
+    pub fn show_game_type_select(&mut self) -> Result<(), JsValue> { ... }
     
-    pub fn show_difficulty_select(&mut self) -> Result<(), JsValue> { ... }
+    pub fn show_options_select(&mut self) -> Result<(), JsValue> { ... }
     
     pub fn show_room_creation(&mut self) -> Result<(), JsValue> { ... }
     
@@ -328,26 +331,19 @@ pub enum ClientMessage {
     },
     CreateRoom {
         player_name: String,
-        game_mode: GameMode,
-        difficulty: Difficulty,
-        custom_settings: Option<CustomSettings>,
+        game_type: GameType,
+        options: GameOptions,
     },
     LeaveRoom,
     StartGame,
     Ping {
         timestamp: u64,
     },
-    RevealCell {
-        x: u8,
-        y: u8,
-    },
-    ToggleFlag {
-        x: u8,
-        y: u8,
-    },
-    ChordAction {
-        x: u8,
-        y: u8,
+    PerformAction {
+        action_type: ActionType,
+        x: f32,
+        y: f32,
+        params: Option<ActionParams>,
     },
     ChatMessage {
         message: String,
@@ -357,12 +353,9 @@ pub enum ClientMessage {
     },
 }
 
-// Position型の代わりにx,yを直接使用する
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CustomSettings {
-    pub width: u8,
-    pub height: u8,
-    pub mines: u16,
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct GameOptions {
+    pub parameters: HashMap<String, Value>,
 }
 
 // サーバーからクライアントへのメッセージ
@@ -374,16 +367,14 @@ pub enum ServerMessage {
     },
     RoomJoined {
         room_id: String,
-        game_mode: GameMode,
-        difficulty: String,
-        custom_settings: Option<CustomSettings>,
+        game_type: GameType,
+        options: GameOptions,
         players: Vec<PlayerInfo>,
     },
     RoomCreated {
         room_id: String,
-        game_mode: GameMode,
-        difficulty: String,
-        custom_settings: Option<CustomSettings>,
+        game_type: GameType,
+        options: GameOptions,
     },
     PlayerJoined {
         player: PlayerInfo,
@@ -392,45 +383,32 @@ pub enum ServerMessage {
         player_id: String,
     },
     GameStarted {
-        board_id: String,
+        game_id: String,
         start_time: u64,
-        board: BoardInfo,
+        board: GameBoardInfo,
     },
     Pong {
         timestamp: u64,
         server_time: u64,
     },
-    CellRevealed {
+    ActionPerformed {
         player_id: String,
-        x: u8,
-        y: u8,
-        value: i8, // -1は地雷
-        revealed_cells: Vec<CellInfo>,
-    },
-    FlagToggled {
-        player_id: String,
-        x: u8,
-        y: u8,
-        is_flagged: bool,
-    },
-    ChordPerformed {
-        player_id: String,
-        x: u8,
-        y: u8,
-        revealed_cells: Vec<CellInfo>,
+        action_type: ActionType,
+        x: f32,
+        y: f32,
+        result: ActionResult,
+        affected_objects: Vec<GameObjectUpdate>,
     },
     GameOver {
-        result: String, // "defeat"
-        cause_player_id: String,
-        mine_location: CellPosition,
-        all_mines: Vec<CellPosition>,
+        result: String,
+        cause_player_id: Option<String>,
         scores: Vec<PlayerScore>,
         game_time: u32,
     },
     GameWon {
         scores: Vec<PlayerScore>,
         game_time: u32,
-        winner: Option<String>, // 競争モードでのみ存在
+        winner: Option<String>,
     },
     ChatReceived {
         player_id: String,
@@ -462,24 +440,30 @@ pub struct PlayerInfo {
 }
 
 #[derive(Deserialize)]
-pub struct BoardInfo {
-    pub width: u8,
-    pub height: u8,
-    pub mine_count: u16,
-    pub cells: Option<Vec<Vec<i8>>>, // 協力モードでのみ初期ボードが送られる
+pub struct GameBoardInfo {
+    pub width: u32,
+    pub height: u32,
+    pub config: HashMap<String, Value>,
+    pub initial_objects: Option<Vec<GameObjectInfo>>,
 }
 
 #[derive(Deserialize)]
-pub struct CellInfo {
-    pub x: u8,
-    pub y: u8,
-    pub value: i8,
+pub struct GameObjectInfo {
+    pub id: String,
+    pub object_type: String,
+    pub x: f32,
+    pub y: f32,
+    pub state: String,
+    pub properties: HashMap<String, Value>,
 }
 
 #[derive(Deserialize)]
-pub struct CellPosition {
-    pub x: u8,
-    pub y: u8,
+pub struct GameObjectUpdate {
+    pub id: String,
+    pub x: f32,
+    pub y: f32,
+    pub state: String,
+    pub properties_update: HashMap<String, Value>,
 }
 
 #[derive(Deserialize)]
@@ -493,7 +477,7 @@ pub struct PlayerScore {
 ## アプリケーションのライフサイクル
 
 ```
-初期化 -> メインメニュー -> モード選択 -> 難易度選択 -> ルーム作成/参加 -> ロビー -> ゲームプレイ -> ゲーム終了 -> メインメニュー
+初期化 -> メインメニュー -> ゲームタイプ選択 -> オプション選択 -> ルーム作成/参加 -> ロビー -> ゲームプレイ -> ゲーム終了 -> メインメニュー
 ```
 
 ### 初期化処理
@@ -508,7 +492,7 @@ fn initialize() -> Result<(), JsValue> {
         .dyn_into::<HtmlCanvasElement>()?;
     
     // ゲームアプリケーションの作成
-    let app = MinesweeperApp::new(canvas)?;
+    let app = GameApp::new(canvas)?;
     
     // グローバル状態として保存
     APP_STATE.with(|state| {
@@ -553,7 +537,7 @@ fn initialize() -> Result<(), JsValue> {
 
 ### ゲームプレイフロー
 ```rust
-fn game_play_update(app: &mut MinesweeperApp, delta_time: f32) -> Result<(), JsValue> {
+fn game_play_update(app: &mut GameApp, delta_time: f32) -> Result<(), JsValue> {
     // ネットワークメッセージの処理
     app.network.process_messages(app)?;
     
@@ -569,7 +553,7 @@ fn game_play_update(app: &mut MinesweeperApp, delta_time: f32) -> Result<(), JsV
 
 ### ユーザー入力処理
 ```rust
-fn handle_click(app: &mut MinesweeperApp, x: i32, y: i32, button: MouseButton) -> Result<(), JsValue> {
+fn handle_click(app: &mut GameApp, x: f32, y: f32, button: MouseButton) -> Result<(), JsValue> {
     // 現在の状態に基づいて処理を分岐
     match &app.state {
         AppState::Game(ref game_info) => {
@@ -577,17 +561,13 @@ fn handle_click(app: &mut MinesweeperApp, x: i32, y: i32, button: MouseButton) -
             if let Some(position) = app.renderer.screen_to_board_position(x, y) {
                 // 操作タイプを決定
                 let action = match button {
-                    MouseButton::Left => NetworkAction::RevealCell { x: position.x, y: position.y },
-                    MouseButton::Right => NetworkAction::ToggleFlag { x: position.x, y: position.y },
-                    MouseButton::Middle => NetworkAction::ChordAction { x: position.x, y: position.y },
+                    MouseButton::Left => ActionType::Primary,
+                    MouseButton::Right => ActionType::Secondary,
+                    MouseButton::Middle => ActionType::Tertiary,
                 };
                 
-                // 状態判定が終わった後でネットワークアクションを実行
-                match action {
-                    NetworkAction::RevealCell { x, y } => app.network.reveal_cell(x, y)?,
-                    NetworkAction::ToggleFlag { x, y } => app.network.toggle_flag(x, y)?,
-                    NetworkAction::ChordAction { x, y } => app.network.chord_action(x, y)?,
-                }
+                // アクションをサーバーに送信
+                app.network.perform_action(action, position.x, position.y, None)?;
             }
         },
         // その他の状態でのクリック処理...
@@ -600,11 +580,12 @@ fn handle_click(app: &mut MinesweeperApp, x: i32, y: i32, button: MouseButton) -
     Ok(())
 }
 
-// ネットワークアクションを表す列挙型
-enum NetworkAction {
-    RevealCell { x: u8, y: u8 },
-    ToggleFlag { x: u8, y: u8 },
-    ChordAction { x: u8, y: u8 },
+// アクションタイプを表す列挙型
+pub enum ActionType {
+    Primary,
+    Secondary,
+    Tertiary,
+    Custom(String),
 }
 ```
 
@@ -673,7 +654,7 @@ pub enum GameError {
 }
 
 // エラー処理関数
-fn handle_error(app: &mut MinesweeperApp, error: GameError) {
+fn handle_error(app: &mut GameApp, error: GameError) {
     log::error!("Game error: {:?}", error);
     
     // エラーメッセージをユーザーに表示
@@ -709,7 +690,7 @@ python -m http.server
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>マルチプレイヤーマインスイーパー</title>
+    <title>マルチプレイヤーゲームフレームワーク</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -722,7 +703,7 @@ python -m http.server
         <div id="ui-container">
             <!-- 各画面のUIを動的に表示 -->
             <div id="main-menu" class="ui-screen">
-                <h1>マインスイーパー対戦</h1>
+                <h1>ゲームフレームワーク</h1>
                 <button id="new-game-btn">新しいゲームを開始</button>
                 <button id="join-game-btn">ゲームに参加する</button>
             </div>
@@ -733,7 +714,7 @@ python -m http.server
     
     <!-- Wasmロード用スクリプト -->
     <script type="module">
-        import init from './pkg/minesweeper_client.js';
+        import init from './pkg/game_framework.js';
         
         async function run() {
             // Wasmモジュールを初期化
@@ -749,9 +730,9 @@ python -m http.server
 ### JavaScript統合コード
 
 ```javascript
-// minesweeper-bindings.js
+// game-bindings.js
 export function setupGameBindings(wasm_module) {
-    window.minesweeper = {
+    window.gameFramework = {
         // UIイベントハンドラー
         onNewGameClick: () => {
             wasm_module.handle_new_game_click();
@@ -761,12 +742,12 @@ export function setupGameBindings(wasm_module) {
             wasm_module.handle_join_game_click();
         },
         
-        onModeSelect: (mode) => {
-            wasm_module.handle_mode_select(mode);
+        onGameTypeSelect: (type) => {
+            wasm_module.handle_game_type_select(type);
         },
         
-        onDifficultySelect: (difficulty) => {
-            wasm_module.handle_difficulty_select(difficulty);
+        onOptionsSelect: (options) => {
+            wasm_module.handle_options_select(options);
         },
         
         onCreateRoomSubmit: (playerName) => {
@@ -803,7 +784,7 @@ export function setupGameBindings(wasm_module) {
 function setupUIBindings() {
     // 各UIボタンにイベントハンドラを設定
     document.getElementById('new-game-btn').addEventListener('click', () => {
-        window.minesweeper.onNewGameClick();
+        window.gameFramework.onNewGameClick();
     });
     
     // その他のUI要素へのバインディング...

@@ -1,7 +1,7 @@
-# マルチプレイヤーマインスイーパー サーバーアーキテクチャ設計 🖥️
+# マルチプレイヤーゲームフレームワーク サーバーアーキテクチャ設計 🖥️
 
 ## 概要
-本ドキュメントでは、マルチプレイヤーマインスイーパーのサーバーサイド実装に関する詳細な設計を記述します。サーバーはRustで実装され、WebSocketとHTTPの両方のサービスを提供します。
+本ドキュメントでは、汎用マルチプレイヤーゲームフレームワークのサーバーサイド実装に関する詳細な設計を記述します。サーバーはRustで実装され、WebSocketとHTTPの両方のサービスを提供します。
 
 ## アーキテクチャ
 
@@ -63,8 +63,8 @@ impl GameServer {
 #[derive(Deserialize)]
 pub struct CreateRoomRequest {
     pub host_name: String,
-    pub game_mode: GameMode,
-    pub difficulty: Difficulty,
+    pub game_type: GameType,
+    pub settings: GameSettings,
 }
 
 #[derive(Serialize)]
@@ -73,8 +73,8 @@ pub struct RoomResponse {
     pub room_code: String,
     pub player_count: usize,
     pub max_players: usize,
-    pub game_mode: GameMode,
-    pub difficulty: Difficulty,
+    pub game_type: GameType,
+    pub settings: GameSettings,
     pub state: GameState,
 }
 
@@ -128,12 +128,11 @@ pub struct GameManager {
 
 impl GameManager {
     pub fn new() -> Self { ... }
-    pub fn create_room(&mut self, host_name: String, game_mode: GameMode, difficulty: Difficulty) -> Result<RoomId, GameError> { ... }
+    pub fn create_room(&mut self, host_name: String, game_type: GameType, settings: GameSettings) -> Result<RoomId, GameError> { ... }
     pub fn join_room(&mut self, room_code: &str, player_name: String) -> Result<(RoomId, PlayerId), GameError> { ... }
     pub fn leave_room(&mut self, room_id: RoomId, player_id: PlayerId) -> Result<(), GameError> { ... }
     pub fn start_game(&mut self, room_id: RoomId, player_id: PlayerId) -> Result<(), GameError> { ... }
-    pub fn reveal_cell(&mut self, room_id: RoomId, player_id: PlayerId, pos: Position) -> Result<Vec<Position>, GameError> { ... }
-    pub fn toggle_flag(&mut self, room_id: RoomId, player_id: PlayerId, pos: Position) -> Result<bool, GameError> { ... }
+    pub fn perform_action(&mut self, room_id: RoomId, player_id: PlayerId, action: GameAction) -> Result<ActionResult, GameError> { ... }
     // その他のゲーム操作メソッド...
 }
 ```
@@ -160,22 +159,21 @@ impl RoomManager {
 }
 ```
 
-### ECSワールド（オプション）
+### ECSワールド
 既存のECSフレームワークを利用する場合の統合ポイント。ゲームロジックをコンポーネントとシステムで実装。
 
 ```rust
-pub struct MinesweeperWorld {
+pub struct GameWorld {
     world: World,
     schedule: Schedule,
 }
 
-impl MinesweeperWorld {
+impl GameWorld {
     pub fn new() -> Self { ... }
     pub fn register_components(&mut self) { ... }
     pub fn register_systems(&mut self) { ... }
-    pub fn create_board(&mut self, width: u8, height: u8, mine_count: u32) -> EntityId { ... }
-    pub fn reveal_cell(&mut self, board_id: EntityId, pos: Position) -> Result<Vec<Position>, GameError> { ... }
-    pub fn toggle_flag(&mut self, board_id: EntityId, pos: Position) -> Result<bool, GameError> { ... }
+    pub fn create_game_state(&mut self, settings: &GameSettings) -> EntityId { ... }
+    pub fn perform_action(&mut self, game_id: EntityId, action: GameAction) -> Result<ActionResult, GameError> { ... }
     pub fn update(&mut self) { ... }
 }
 ```
@@ -187,10 +185,10 @@ impl MinesweeperWorld {
 Client -> WebSocketサーバー -> メッセージ解析 -> ゲームマネージャー -> ルームマネージャー -> ゲームロジック実行 -> 結果生成 -> WebSocketサーバー -> Broadcast -> Clients
 ```
 
-例として、セルを開く操作のフロー：
-1. クライアントがRevealCellメッセージを送信
+例として、ゲーム内アクションの処理フロー：
+1. クライアントがActionメッセージを送信
 2. WebSocketサーバーがメッセージを受信して解析
-3. ゲームマネージャーのreveal_cellメソッドを呼び出し
+3. ゲームマネージャーのperform_actionメソッドを呼び出し
 4. 対応するルームマネージャーが処理を実行
 5. ゲームロジック（ECSまたは直接実装）が実行され結果を返す
 6. 結果がRoomEventとして生成される
@@ -210,8 +208,8 @@ pub enum GameError {
     #[error("Room is full")]
     RoomFull,
     
-    #[error("Invalid move: {0}")]
-    InvalidMove(String),
+    #[error("Invalid action: {0}")]
+    InvalidAction(String),
     
     #[error("Not authorized: {0}")]
     NotAuthorized(String),
@@ -361,7 +359,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     
     // サーバー起動
-    log::info!("Starting Minesweeper server...");
+    log::info!("Starting Game Server...");
     let server_task = tokio::spawn(async move {
         if let Err(e) = server.start().await {
             log::error!("Server error: {}", e);

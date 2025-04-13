@@ -1,391 +1,374 @@
-# マルチプレイヤーマインスイーパー 技術仕様書 🛠️
+# ゲームフレームワーク 技術仕様書
 
 ## システム概要
 
-マルチプレイヤーマインスイーパーは、Rust と WebAssembly (Wasm) を用いたブラウザベースのゲームです。プレイヤーは協力モードまたは競争モードでマインスイーパーをプレイできます。
+このシステムはRustとWebAssemblyを使用した汎用的なマルチプレイヤーゲームフレームワークです。様々なタイプのゲームを容易に開発できるよう設計されており、協力モードや対戦モードなど複数のプレイスタイルをサポートしています。
 
 ## 技術スタック
 
 ### サーバーサイド
 - **言語**: Rust
-- **WebSocketサーバー**: tokio + tokio-tungstenite (ポート: 8101)
-- **HTTPサーバー**: actix-web (ポート: 8001)
-- **データ保存**: インメモリ（ゲームセッション中のみ保持）
+- **WebSocketサーバー**: tokioベースのWebSocketライブラリ
+- **HTTPサーバー**: actix-web
+- **データベース**: SQLite（開発）、PostgreSQL（本番）
+- **認証**: JWT（JSON Web Tokens）
 
 ### クライアントサイド
-- **フロントエンド基盤**: HTML5 + CSS3 + JavaScript
-- **Rustコード**: WebAssembly (Wasm) にコンパイル
-- **WASM処理**: wasm-bindgen + web-sys
-- **レンダリング**: Canvas API
-- **UI**: カスタムコンポーネント + シンプルな CSS フレームワーク
-- **WebSocket通信**: ブラウザの WebSocket API
+- **HTML5/CSS3**
+- **JavaScript**
+- **WebAssembly**（Rustからコンパイル）
 
 ## アーキテクチャ
 
-### 全体構成
+システム全体は以下のコンポーネントで構成されています：
 
 ```
-+---------------------+         +---------------------+
-|                     |         |                     |
-|    クライアント     | <-----> |      サーバー       |
-|    (ブラウザ)       |         |                     |
-|                     |         |                     |
-+---------------------+         +---------------------+
-       |                                 |
-       v                                 v
-+---------------------+         +---------------------+
-|  Rust → WebAssembly |         |      Rustコード     |
-|                     |         |                     |
-+---------------------+         +---------------------+
-```
-
-### サーバー構成
-
-```
-+-------------------------------------------+
-|                サーバー                   |
-|                                           |
-| +-------------------+ +-------------------+
-| |                   | |                   |
-| |   HTTPサーバー    | |  WebSocketサーバー|
-| |  (静的アセット)   | |    (ゲーム通信)   |
-| |                   | |                   |
-| +-------------------+ +-------------------+
-|              |                 |          |
-| +-------------------+ +-------------------+
-| |                   | |                   |
-| |    ゲームロジック | |   プレイヤー管理  |
-| |                   | |                   |
-| +-------------------+ +-------------------+
-|                                           |
-+-------------------------------------------+
+                 ┌───────────────────────────────────────┐
+                 │              クライアント              │
+                 │                                       │
+                 │   ┌─────────────┐    ┌─────────────┐  │
+                 │   │  WASM Game  │    │    UI       │  │
+                 │   │   Engine    │◄───►  Components │  │
+                 │   └─────┬───────┘    └─────────────┘  │
+                 │         │                             │
+                 └─────────┼─────────────────────────────┘
+                           │
+                           ▼
+     ┌───────────────────────────────────────────────────────┐
+     │                       WebSocket                       │
+     └───────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                           サーバー                              │
+│                                                                 │
+│  ┌─────────────┐   ┌────────────┐   ┌────────────────────────┐  │
+│  │  HTTPサーバー │   │ WebSocket │   │                        │  │
+│  │ (actix-web) │   │  サーバー   │   │                        │  │
+│  └─────────────┘   └─────┬──────┘   │                        │  │
+│                          │          │                        │  │
+│                    ┌─────▼──────┐   │     ゲームロジック      │  │
+│                    │ セッション  │   │                        │  │
+│                    │ マネージャー │   │                        │  │
+│                    └─────┬──────┘   │                        │  │
+│                          │          │                        │  │
+│                    ┌─────▼──────┐   │                        │  │
+│                    │   ルーム    │   │                        │  │
+│                    │ マネージャー │   │                        │  │
+│                    └─────┬──────┘   └────────────────────────┘  │
+│                          │                                       │
+│                          ▼                                       │
+│                    ┌────────────┐                                │
+│                    │ データベース │                                │
+│                    │（オプション） │                                │
+│                    └────────────┘                                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ## コンポーネント詳細
 
 ### サーバーコンポーネント
 
-#### HTTPサーバー (actix-web)
-- 静的アセット配信（HTML, CSS, JavaScript, WASM）
-- 簡易的なエンドポイント
-  - アクティブゲームルームの情報取得
-  - 新しいゲームルームの作成
+1. **HTTPサーバー**
+   - 静的ファイルの提供
+   - RESTエンドポイント（ユーザー管理、統計など）
+   - ヘルスチェックエンドポイント
 
-#### WebSocketサーバー (tokio-tungstenite)
-- リアルタイム通信
-- ルーム管理
-- メッセージブロードキャスト
-- 接続状態監視
+2. **WebSocketサーバー**
+   - クライアント接続管理
+   - メッセージのシリアライズ/デシリアライズ
+   - メッセージルーティング
 
-#### ゲームロジックモジュール
-- ゲームボード生成
-- セル開封処理
-- 勝利/敗北条件判定
-- スコア計算
+3. **セッションマネージャー**
+   - プレイヤーセッション追跡
+   - 一時的なユーザーID割り当て
+   - タイムアウト処理
 
-#### プレイヤー管理モジュール
-- 一時的なプレイヤーセッション管理（メモリ内）
-- ユーザー名とランダムIDの割り当て
-- 接続/切断の監視
+4. **ルームマネージャー**
+   - ゲームルーム作成/削除
+   - プレイヤー参加/退出管理
+   - ルームメタデータ管理
+
+5. **ゲームロジックエンジン**
+   - 汎用ゲームステート管理
+   - ゲームルール検証
+   - プラグイン式ゲーム実装
+   - イベント発行
 
 ### クライアントコンポーネント
 
-#### WebAssemblyモジュール
-- Rustをコンパイルして生成
-- ゲームロジックの一部をブラウザで実行
-- 入力処理
-- ローカル状態管理
+1. **WASMゲームエンジン**
+   - サーバーとの通信
+   - ローカルゲーム状態管理
+   - 入力処理
+   - 予測/補正ロジック
 
-#### レンダリングエンジン
-- Canvas APIによるゲームボード描画
-- アニメーション処理
-- スプライト管理
-
-#### 通信モジュール
-- WebSocket接続管理
-- メッセージのシリアライズ/デシリアライズ
-- 再接続処理
-- 通信状態監視
-
-#### UIコンポーネント
-- ゲームコントロール（開始、停止、リセット）
-- チャットインターフェース
-- 設定パネル
-- スコアボード
+2. **UIコンポーネント**
+   - レンダリングエンジン
+   - ユーザー入力ハンドリング
+   - アニメーション
+   - サウンド管理
 
 ## データモデル
 
-### ゲームボード
+### 基本構造体
+
 ```rust
-struct GameBoard {
-    width: u8,
-    height: u8,
-    cells: Vec<Cell>,
-    mine_count: u32,
-    revealed_count: u32,
-    flagged_count: u32,
-    first_move_made: bool,
+// ゲームインターフェイス - すべてのゲーム実装はこのトレイトを実装する必要がある
+pub trait Game {
+    type State: GameState;
+    type Action: GameAction;
+    
+    fn new(config: GameConfig) -> Self;
+    fn apply_action(&mut self, action: Self::Action) -> Result<(), GameError>;
+    fn get_state(&self) -> &Self::State;
+    fn is_game_over(&self) -> bool;
+    fn get_winners(&self) -> Vec<PlayerId>;
 }
 
-struct Cell {
-    position: Position,
-    is_mine: bool,
-    is_revealed: bool,
-    is_flagged: bool,
-    adjacent_mines: u8,
-    revealed_by: Option<PlayerId>,
-    flagged_by: Option<PlayerId>,
-    reveal_time: Option<Instant>,
+// 汎用ゲーム状態トレイト
+pub trait GameState: Clone + Serialize + Deserialize {
+    fn get_player_view(&self, player_id: PlayerId) -> Self;
 }
 
-struct Position {
-    x: u8,
-    y: u8,
-}
-```
-
-### プレイヤー
-```rust
-struct Player {
-    id: PlayerId,
-    username: String,
-    color: [u8; 4], // RGBA
-    score: u32,
-    is_host: bool,
-    is_ready: bool,
-    connection_state: ConnectionState,
-    last_activity: Instant,
+// 汎用ゲームアクショントレイト
+pub trait GameAction: Clone + Serialize + Deserialize {
+    fn get_player_id(&self) -> PlayerId;
+    fn is_valid(&self, state: &dyn GameState) -> bool;
 }
 
-enum ConnectionState {
-    Connected,
-    Disconnected(Instant), // 切断時刻
-    Reconnecting,
-}
-```
-
-### ゲームルーム
-```rust
-struct GameRoom {
-    id: RoomId,
-    code: String, // 参加コード（ABCDE形式）
-    players: Vec<Player>,
-    board: GameBoard,
-    game_mode: GameMode,
-    difficulty: Difficulty,
-    state: GameState,
-    created_at: Instant,
-    last_activity: Instant,
-    max_players: u8,
-    chat_history: Vec<ChatMessage>,
+// プレイヤー
+pub struct Player {
+    pub id: PlayerId,
+    pub name: String,
+    pub connected: bool,
+    pub last_activity: SystemTime,
 }
 
-enum GameMode {
+// ゲームルーム
+pub struct GameRoom {
+    pub id: RoomId,
+    pub name: String,
+    pub game_type: GameType,
+    pub players: Vec<Player>,
+    pub state: GameState,
+    pub created_at: SystemTime,
+    pub settings: GameSettings,
+    pub status: RoomStatus,
+}
+
+// ルームステータス
+pub enum RoomStatus {
+    Lobby,
+    Playing,
+    GameOver,
+}
+
+// ゲーム設定
+pub struct GameSettings {
+    pub max_players: u8,
+    pub game_mode: GameMode,
+    pub custom_options: HashMap<String, Value>,
+}
+
+// ゲームモード
+pub enum GameMode {
     Cooperative,
     Competitive,
-}
-
-enum Difficulty {
-    Beginner,    // 9x9, 10 mines
-    Intermediate, // 16x16, 40 mines
-    Advanced,    // 30x16, 99 mines
-    Custom(u8, u8, u32), // width, height, mines
-}
-
-enum GameState {
-    Lobby,
-    InProgress(Instant), // 開始時刻
-    Completed(GameResult),
-    Abandoned,
-}
-
-struct GameResult {
-    winner: Option<PlayerId>, // 競争モードの場合のみ
-    scores: HashMap<PlayerId, u32>,
-    duration: Duration,
-    is_victory: bool,
+    Team,
 }
 ```
 
 ## 通信プロトコル
 
-WebSocketを使用して、クライアントとサーバー間でJSONメッセージを交換します。
+WebSocketを介したJSON形式のメッセージングシステムを使用します。
 
-### メッセージ形式
-```json
-{
-  "type": "message_type",
-  "data": { ... },
-  "timestamp": 1234567890
+### メッセージ構造
+
+```rust
+pub struct Message {
+    pub msg_type: MessageType,
+    pub payload: Value,
+    pub client_id: Option<ClientId>,
+    pub timestamp: u64,
+}
+
+pub enum MessageType {
+    // システムメッセージ
+    Connect,
+    Disconnect,
+    Ping,
+    Pong,
+    Error,
+    
+    // ルーム関連
+    CreateRoom,
+    JoinRoom,
+    LeaveRoom,
+    RoomInfo,
+    RoomList,
+    
+    // ゲーム関連
+    GameAction,
+    GameState,
+    GameStart,
+    GameEnd,
+    
+    // チャット
+    ChatMessage,
+    
+    // カスタムメッセージ
+    Custom(String),
 }
 ```
 
-### クライアント → サーバー メッセージ
-- `join_room`: ルームに参加
-- `create_room`: 新しいルームを作成
-- `ready`: 準備完了状態をトグル
-- `start_game`: ゲーム開始（ホストのみ）
-- `reveal_cell`: セルを開く
-- `flag_cell`: セルに旗を立てる
-- `chat_message`: チャットメッセージを送信
-- `leave_room`: ルームを退出
+### メッセージ例
 
-### サーバー → クライアント メッセージ
-- `room_update`: ルーム情報の更新
-- `game_state`: ゲーム状態の更新
-- `cell_revealed`: セルが開かれた
-- `cell_flagged`: セルに旗が立てられた
-- `game_over`: ゲーム終了（勝利または敗北）
-- `player_joined`: 新しいプレイヤーが参加
-- `player_left`: プレイヤーが退出
-- `chat_broadcast`: チャットメッセージをブロードキャスト
-- `error`: エラーメッセージ
+```json
+{
+  "msg_type": "GameAction",
+  "payload": {
+    "action_type": "PlaceToken",
+    "position": {"x": 3, "y": 2},
+    "player_id": "player123"
+  },
+  "client_id": "client456",
+  "timestamp": 1623456789
+}
+```
 
-## 状態管理と同期
+## ステート管理と同期
 
 ### サーバー権威モデル
-- サーバーがゲーム状態の信頼できる唯一の情報源
-- クライアントは予測的に動作可能だが、サーバーからの確認が必要
-- 不正行為防止のための最小限の検証
 
-### 状態同期
-- イベントベースの同期
-- デルタ更新（変更された部分のみ送信）
-- クライアント側での補間/予測
+サーバーが唯一の信頼できるゲーム状態を保持します。クライアントからのアクションはすべてサーバーで検証され、承認されたアクションのみがゲーム状態に適用されます。
 
-### 遅延対策
-- クライアント側予測
-- サーバー更新時の滑らかな補正
-- 接続品質モニタリング
+### クライアント予測
+
+レイテンシーを最小化するために、クライアントはローカルで予測を実行します：
+
+1. クライアントはアクションをローカルに適用
+2. 同時にアクションをサーバーに送信
+3. サーバーがアクションを検証し、処理
+4. サーバーが更新された状態をブロードキャスト
+5. クライアントが必要に応じて自身の状態を修正
+
+### 部分状態更新
+
+帯域幅を節約するため、完全な状態ではなく差分更新を送信します：
+
+```rust
+pub struct StateUpdate {
+    pub full_state: bool,
+    pub delta: Option<StateDelta>,
+    pub state: Option<GameState>,
+    pub sequence_number: u64,
+}
+
+pub struct StateDelta {
+    pub changed_entities: Vec<Entity>,
+    pub removed_entity_ids: Vec<EntityId>,
+    pub added_entities: Vec<Entity>,
+}
+```
 
 ## セキュリティ考慮事項
 
-### 入力検証
-- すべてのクライアント入力はサーバーで基本的な検証
-- 不正な操作の拒否
+1. **入力検証**
+   - すべてのクライアント入力をサーバーで検証
+   - 不正なアクションの拒否
 
-### ユーザー識別
-- 簡易的なランダムIDによるユーザー識別
-- ルームコードによるアクセス制限
+2. **レート制限**
+   - クライアントごとのメッセージ送信レート制限
+   - 過剰なリクエストの防止
 
-### レート制限
-- 短時間での過剰なリクエスト防止
-- 基本的なDoS攻撃対策
+3. **認証**（拡張機能）
+   - JWT（JSON Web Tokens）による認証
+   - セッションタイムアウト
+
+4. **WebSocketセキュリティ**
+   - WSS（WebSocket Secure）接続の使用
+   - 接続の適切な閉鎖処理
 
 ## パフォーマンス最適化
 
 ### ネットワーク最適化
-- メッセージの最小化
-- バッチ処理（複数の小さな更新を1つのメッセージにまとめる）
+- バイナリプロトコル（オプション）
+- メッセージバッチ処理
+- 差分更新
 
 ### WebAssembly最適化
-- バイナリサイズの最小化
-- ホットパスの最適化
+- メモリ使用量の最小化
+- 計算集約型タスクの最適化
+- バイナリサイズの最適化
 
 ### レンダリング最適化
-- ダーティ領域のみの再描画
-- キャンバスレイヤーの適切な使用
+- キャンバスレンダリング効率化
+- アセット事前読み込み
+- アニメーションフレーム管理
 
-## エラー処理と回復
+## エラー処理と復旧
 
 ### 接続エラー
 - 自動再接続メカニズム
-- 接続状態の通知
+- 指数バックオフリトライ
+- 接続状態表示
 
 ### ゲームエラー
-- 無効な操作の処理
-- ユーザーへのフィードバック
+- アクションロールバック
+- 状態修正機能
+- エラーログ記録
 
-## 開発・デプロイフロー
+### クラッシュリカバリー
+- 定期的な状態スナップショット
+- セッション復元メカニズム
+
+## 開発・デプロイメントフロー
 
 ### 開発環境
-- Rustツールチェーン (stable)
-- wasm-pack ビルドツール
-- ローカルデバッグサーバー
+- Rustツールチェーン
+- wasm-packビルドツール
+- npm開発サーバー
 
 ### ビルドプロセス
-```bash
-# Wasmビルド
-wasm-pack build --target web --out-dir ./static/wasm
-
-# サーバービルド
-cargo build --release
+```
+1. Rustバックエンドのビルド: cargo build --release
+2. WASMコンポーネントのコンパイル: wasm-pack build --target web
+3. フロントエンドアセットの構築: npm run build
 ```
 
 ### デプロイメント
-- サーバー: シンプルなバイナリとして実行
-- クライアント: 静的アセットとして配信
+- Dockerイメージ作成
+- 環境変数による設定
+- ヘルスチェックとモニタリング
 
-## ゲームルーム管理
+## スケーラビリティ
 
-### プレイヤー要件
-- 最小プレイヤー数: 2人（ゲーム開始に必要な人数）
-- 最大プレイヤー数: 8人（ルームあたりの上限）
-- 全プレイヤーが準備完了状態になるまでゲームを開始できない
-- ホストのみがゲーム開始権限を持つ
+### 将来の拡張性
+- 新しいゲームタイプの追加
+- カスタムゲームロジックプラグイン
+- 拡張UIコンポーネント
 
-### ルーム参加フロー
-1. プレイヤーはルームコード（5文字）を使用して既存のルームに参加、または新しいルームを作成
-2. 参加時にユーザー名を入力
-3. ルームに参加するとロビー画面に遷移
-4. プレイヤーは「準備完了」ボタンでゲーム開始の準備を示す
-5. 全員が準備完了になるとホストがゲームを開始可能
-
-### UIフローと状態遷移
-```
-スタート画面 → ゲームモード選択 → 難易度選択 → ルーム作成/参加 → ロビー → ゲームプレイ → ゲーム終了画面
-```
-
-#### 各画面の主な状態変化
-- **スタート画面**: 
-  - 新規ゲーム開始: ゲームモード選択画面へ
-  - ゲーム参加: ルーム参加画面へ
-  
-- **ロビー画面**: 
-  - プレイヤー参加/退出の表示
-  - チャットメッセージの表示
-  - 準備状態の切り替え
-  - ゲーム開始（全員準備完了時にホストが実行）
-  
-- **ゲームプレイ画面**:
-  - リアルタイムのボード状態更新
-  - プレイヤーアクション（セル開封、旗設置）
-  - スコア更新
-  - ゲーム終了条件達成
-  
-- **ゲーム終了画面**:
-  - 最終スコア表示
-  - 勝者表示（競争モード）
-  - 統計情報表示
-  - リプレイまたはメインメニュー選択
-
-## クライアント機能要件
-
-### 基本機能
-- ルーム作成・参加
-- セル操作（開封、旗設置）
-- チャット機能
-- スコア表示
-- ゲーム状態表示
-
-### 操作方法
-- 左クリック/タップ: セルを開く
-- 右クリック/長押し: 旗を立てる/外す
-- 中クリック/ダブルタップ: 周囲の開封（隣接する数字のセルで、周囲に正確な数の旗がある場合）
-
-### クエスチョンマーク機能
-**注意**: 現在の実装ではクエスチョンマーク機能はオプションとして計画されていますが、まだ実装されていません。将来のアップデートで追加される予定です。
+### 水平スケーリング
+- WebSocketサーバーの複数インスタンス
+- ルーム分散システム
+- ロードバランシング
 
 ## テスト戦略
 
-### ユニットテスト
-- ゲームロジックの検証
-- エッジケースの処理確認
+### 単体テスト
+- ゲームロジックのユニットテスト
+- メッセージハンドラーのテスト
 
 ### 統合テスト
 - クライアント-サーバー通信テスト
-- 複数プレイヤーシナリオテスト
+- 完全なゲームフローテスト
+
+### 負荷テスト
+- 同時接続テスト
+- メッセージスループットテスト
+- レイテンシーテスト
 
 ### ユーザーテスト
-- UIユーザビリティテスト
-- ゲームプレイフィードバック収集 
+- プレイテスト
+- UIユーザビリティテスト 
