@@ -37,11 +37,6 @@ function getStringFromWasm0(ptr, len) {
     return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
-function getArrayU8FromWasm0(ptr, len) {
-    ptr = ptr >>> 0;
-    return getUint8ArrayMemory0().subarray(ptr / 1, ptr / 1 + len);
-}
-
 let WASM_VECTOR_LEN = 0;
 
 const cachedTextEncoder = (typeof TextEncoder !== 'undefined' ? new TextEncoder('utf-8') : { encode: () => { throw Error('TextEncoder not available') } } );
@@ -203,6 +198,12 @@ function debugString(val) {
     return className;
 }
 
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_export_2.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
+}
+
 export function start() {
     wasm.start();
 }
@@ -211,14 +212,9 @@ export function wasm_logger_init() {
     wasm.wasm_logger_init();
 }
 
-function takeFromExternrefTable0(idx) {
-    const value = wasm.__wbindgen_export_2.get(idx);
-    wasm.__externref_table_dealloc(idx);
-    return value;
-}
 /**
  * @param {string} canvas_id
- * @returns {Game}
+ * @returns {GameInstance}
  */
 export function initialize_game(canvas_id) {
     const ptr0 = passStringToWasm0(canvas_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -227,28 +223,27 @@ export function initialize_game(canvas_id) {
     if (ret[2]) {
         throw takeFromExternrefTable0(ret[1]);
     }
-    return Game.__wrap(ret[0]);
+    return GameInstance.__wrap(ret[0]);
 }
 
-function __wbg_adapter_20(arg0, arg1, arg2) {
-    wasm.closure4_externref_shim(arg0, arg1, arg2);
+function __wbg_adapter_28(arg0, arg1, arg2) {
+    wasm.closure2_externref_shim(arg0, arg1, arg2);
 }
 
-const __wbindgen_enum_BinaryType = ["blob", "arraybuffer"];
+function __wbg_adapter_35(arg0, arg1, arg2) {
+    wasm.closure85_externref_shim(arg0, arg1, arg2);
+}
 
 const GameFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_game_free(ptr >>> 0, 1));
-
+/**
+ * ゲームインスタンス
+ *
+ * ゲームの状態とシステムを管理する主要な構造体です。
+ * ゲームループの制御、リソースの管理、エンティティの管理を行います。
+ */
 export class Game {
-
-    static __wrap(ptr) {
-        ptr = ptr >>> 0;
-        const obj = Object.create(Game.prototype);
-        obj.__wbg_ptr = ptr;
-        GameFinalization.register(obj, obj.__wbg_ptr, obj);
-        return obj;
-    }
 
     __destroy_into_raw() {
         const ptr = this.__wbg_ptr;
@@ -262,19 +257,34 @@ export class Game {
         wasm.__wbg_game_free(ptr, 0);
     }
     /**
+     * 新しいゲームインスタンスを作成します。
+     *
+     * # 引数
+     *
+     * * `canvas_id` - ゲームの描画先キャンバスのID
+     *
+     * # 戻り値
+     *
+     * 初期化されたGameインスタンス、または初期化エラー
      * @param {string} canvas_id
-     * @returns {Game}
      */
-    static new(canvas_id) {
+    constructor(canvas_id) {
         const ptr0 = passStringToWasm0(canvas_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.game_new(ptr0, len0);
         if (ret[2]) {
             throw takeFromExternrefTable0(ret[1]);
         }
-        return Game.__wrap(ret[0]);
+        this.__wbg_ptr = ret[0] >>> 0;
+        GameFinalization.register(this, this.__wbg_ptr, this);
+        return this;
     }
     /**
+     * ゲームのメインループを1フレーム進めます。
+     *
+     * # 引数
+     *
+     * * `delta_time` - 前フレームからの経過時間（秒）
      * @param {number} delta_time
      */
     update(delta_time) {
@@ -283,6 +293,9 @@ export class Game {
             throw takeFromExternrefTable0(ret[0]);
         }
     }
+    /**
+     * ゲームを描画します。
+     */
     render() {
         const ret = wasm.game_render(this.__wbg_ptr);
         if (ret[1]) {
@@ -290,15 +303,129 @@ export class Game {
         }
     }
     /**
-     * @param {string} event_type
-     * @param {string} key_code
+     * キー入力を処理します。
+     *
+     * # 引数
+     *
+     * * `key_code` - キーコード
+     * * `pressed` - キーが押されたかどうか
+     * @param {number} key_code
+     * @param {boolean} pressed
      */
-    handle_key_event(event_type, key_code) {
-        const ptr0 = passStringToWasm0(event_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    handle_key_input(key_code, pressed) {
+        const ret = wasm.game_handle_key_input(this.__wbg_ptr, key_code, pressed);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * マウス入力を処理します。
+     *
+     * # 引数
+     *
+     * * `x` - マウスのX座標
+     * * `y` - マウスのY座標
+     * * `button` - マウスボタン
+     * * `pressed` - ボタンが押されたかどうか
+     * @param {number} x
+     * @param {number} y
+     * @param {number} button
+     * @param {boolean} pressed
+     */
+    handle_mouse_input(x, y, button, pressed) {
+        const ret = wasm.game_handle_mouse_input(this.__wbg_ptr, x, y, button, pressed);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+}
+
+const GameInstanceFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_gameinstance_free(ptr >>> 0, 1));
+
+export class GameInstance {
+
+    static __wrap(ptr) {
+        ptr = ptr >>> 0;
+        const obj = Object.create(GameInstance.prototype);
+        obj.__wbg_ptr = ptr;
+        GameInstanceFinalization.register(obj, obj.__wbg_ptr, obj);
+        return obj;
+    }
+
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        GameInstanceFinalization.unregister(this);
+        return ptr;
+    }
+
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_gameinstance_free(ptr, 0);
+    }
+    /**
+     * @param {string} canvas_id
+     * @returns {GameInstance}
+     */
+    static new(canvas_id) {
+        const ptr0 = passStringToWasm0(canvas_id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(key_code, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.game_handle_key_event(this.__wbg_ptr, ptr0, len0, ptr1, len1);
+        const ret = wasm.gameinstance_new(ptr0, len0);
+        if (ret[2]) {
+            throw takeFromExternrefTable0(ret[1]);
+        }
+        return GameInstance.__wrap(ret[0]);
+    }
+    /**
+     * @param {string} server_url
+     */
+    connect_to_server(server_url) {
+        const ptr0 = passStringToWasm0(server_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.gameinstance_connect_to_server(this.__wbg_ptr, ptr0, len0);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    disconnect_from_server() {
+        const ret = wasm.gameinstance_disconnect_from_server(this.__wbg_ptr);
+        if (ret[1]) {
+            throw takeFromExternrefTable0(ret[0]);
+        }
+    }
+    /**
+     * @returns {string}
+     */
+    get_connection_state() {
+        let deferred1_0;
+        let deferred1_1;
+        try {
+            const ret = wasm.gameinstance_get_connection_state(this.__wbg_ptr);
+            deferred1_0 = ret[0];
+            deferred1_1 = ret[1];
+            return getStringFromWasm0(ret[0], ret[1]);
+        } finally {
+            wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+        }
+    }
+    /**
+     * @returns {number}
+     */
+    update() {
+        const ret = wasm.gameinstance_update(this.__wbg_ptr);
+        return ret;
+    }
+    render() {
+        wasm.gameinstance_render(this.__wbg_ptr);
+    }
+    /**
+     * キーイベントを処理
+     * @param {number} key_code
+     */
+    handle_key_event(key_code) {
+        const ret = wasm.gameinstance_handle_key_event(this.__wbg_ptr, key_code);
         if (ret[1]) {
             throw takeFromExternrefTable0(ret[0]);
         }
@@ -312,32 +439,7 @@ export class Game {
     handle_mouse_event(event_type, x, y, button) {
         const ptr0 = passStringToWasm0(event_type, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.game_handle_mouse_event(this.__wbg_ptr, ptr0, len0, x, y, isLikeNone(button) ? 0x100000001 : (button) >> 0);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
-    }
-    /**
-     * @param {string} message
-     */
-    handle_network_message(message) {
-        const ptr0 = passStringToWasm0(message, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.game_handle_network_message(this.__wbg_ptr, ptr0, len0);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
-    }
-    /**
-     * @param {string} server_url
-     */
-    connect_to_server(server_url) {
-        const ptr0 = passStringToWasm0(server_url, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.game_connect_to_server(this.__wbg_ptr, ptr0, len0);
-        if (ret[1]) {
-            throw takeFromExternrefTable0(ret[0]);
-        }
+        wasm.gameinstance_handle_mouse_event(this.__wbg_ptr, ptr0, len0, x, y, isLikeNone(button) ? 0x100000001 : (button) >> 0);
     }
 }
 
@@ -375,18 +477,12 @@ async function __wbg_load(module, imports) {
 function __wbg_get_imports() {
     const imports = {};
     imports.wbg = {};
-    imports.wbg.__wbg_arc_c0ea16371fccfef1 = function() { return handleError(function (arg0, arg1, arg2, arg3, arg4, arg5) {
-        arg0.arc(arg1, arg2, arg3, arg4, arg5);
-    }, arguments) };
-    imports.wbg.__wbg_beginPath_0198cb08b8521814 = function(arg0) {
-        arg0.beginPath();
-    };
     imports.wbg.__wbg_call_672a4d21634d4a24 = function() { return handleError(function (arg0, arg1) {
         const ret = arg0.call(arg1);
         return ret;
     }, arguments) };
-    imports.wbg.__wbg_closePath_936abd634768b284 = function(arg0) {
-        arg0.closePath();
+    imports.wbg.__wbg_clearRect_8e4ba7ea0e06711a = function(arg0, arg1, arg2, arg3, arg4) {
+        arg0.clearRect(arg1, arg2, arg3, arg4);
     };
     imports.wbg.__wbg_close_2893b7d056a0627d = function() { return handleError(function (arg0) {
         arg0.close();
@@ -406,20 +502,11 @@ function __wbg_get_imports() {
         const ret = arg0.document;
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
     };
-    imports.wbg.__wbg_error_061ce7d73ee8c2bc = function(arg0, arg1) {
-        console.error(getStringFromWasm0(arg0, arg1));
-    };
     imports.wbg.__wbg_error_524f506f44df1645 = function(arg0) {
         console.error(arg0);
     };
     imports.wbg.__wbg_error_80de38b3f7cc3c3c = function(arg0, arg1, arg2, arg3) {
         console.error(arg0, arg1, arg2, arg3);
-    };
-    imports.wbg.__wbg_fillRect_c38d5d56492a2368 = function(arg0, arg1, arg2, arg3, arg4) {
-        arg0.fillRect(arg1, arg2, arg3, arg4);
-    };
-    imports.wbg.__wbg_fill_34096e49d2aaa307 = function(arg0) {
-        arg0.fill();
     };
     imports.wbg.__wbg_getContext_e9cf379449413580 = function() { return handleError(function (arg0, arg1, arg2) {
         const ret = arg0.getContext(getStringFromWasm0(arg1, arg2));
@@ -429,8 +516,13 @@ function __wbg_get_imports() {
         const ret = arg0.getElementById(getStringFromWasm0(arg1, arg2));
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
     };
-    imports.wbg.__wbg_getRandomValues_3d90134a348e46b3 = function() { return handleError(function (arg0, arg1) {
-        globalThis.crypto.getRandomValues(getArrayU8FromWasm0(arg0, arg1));
+    imports.wbg.__wbg_get_67b2ba62fc30de12 = function() { return handleError(function (arg0, arg1) {
+        const ret = Reflect.get(arg0, arg1);
+        return ret;
+    }, arguments) };
+    imports.wbg.__wbg_has_a5ea9117f258a0ec = function() { return handleError(function (arg0, arg1) {
+        const ret = Reflect.has(arg0, arg1);
+        return ret;
     }, arguments) };
     imports.wbg.__wbg_height_838cee19ba8597db = function(arg0) {
         const ret = arg0.height;
@@ -469,8 +561,18 @@ function __wbg_get_imports() {
         const ret = result;
         return ret;
     };
+    imports.wbg.__wbg_log_1ae1e9f741096e91 = function(arg0, arg1) {
+        console.log(arg0, arg1);
+    };
+    imports.wbg.__wbg_log_c222819a41e063d3 = function(arg0) {
+        console.log(arg0);
+    };
     imports.wbg.__wbg_log_cad59bb680daec67 = function(arg0, arg1, arg2, arg3) {
         console.log(arg0, arg1, arg2, arg3);
+    };
+    imports.wbg.__wbg_new_405e22f390576ce2 = function() {
+        const ret = new Object();
+        return ret;
     };
     imports.wbg.__wbg_new_92c54fc74574ef55 = function() { return handleError(function (arg0, arg1) {
         const ret = new WebSocket(getStringFromWasm0(arg0, arg1));
@@ -480,6 +582,14 @@ function __wbg_get_imports() {
         const ret = new Function(getStringFromWasm0(arg0, arg1));
         return ret;
     };
+    imports.wbg.__wbg_now_807e54c39636c349 = function() {
+        const ret = Date.now();
+        return ret;
+    };
+    imports.wbg.__wbg_parse_def2e24ef1252aff = function() { return handleError(function (arg0, arg1) {
+        const ret = JSON.parse(getStringFromWasm0(arg0, arg1));
+        return ret;
+    }, arguments) };
     imports.wbg.__wbg_reason_49f1cede8bcf23dd = function(arg0, arg1) {
         const ret = arg1.reason;
         const ptr1 = passStringToWasm0(ret, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -487,18 +597,13 @@ function __wbg_get_imports() {
         getDataViewMemory0().setInt32(arg0 + 4 * 1, len1, true);
         getDataViewMemory0().setInt32(arg0 + 4 * 0, ptr1, true);
     };
-    imports.wbg.__wbg_restore_cc5ae2746f7b5043 = function(arg0) {
-        arg0.restore();
-    };
-    imports.wbg.__wbg_save_c675a7a4bbd44e4a = function(arg0) {
-        arg0.save();
-    };
-    imports.wbg.__wbg_setbinaryType_92fa1ffd873b327c = function(arg0, arg1) {
-        arg0.binaryType = __wbindgen_enum_BinaryType[arg1];
-    };
-    imports.wbg.__wbg_setfillStyle_4f8f616d87dea4df = function(arg0, arg1) {
-        arg0.fillStyle = arg1;
-    };
+    imports.wbg.__wbg_send_0293179ba074ffb4 = function() { return handleError(function (arg0, arg1, arg2) {
+        arg0.send(getStringFromWasm0(arg1, arg2));
+    }, arguments) };
+    imports.wbg.__wbg_set_bb8cecf6a62b9f46 = function() { return handleError(function (arg0, arg1, arg2) {
+        const ret = Reflect.set(arg0, arg1, arg2);
+        return ret;
+    }, arguments) };
     imports.wbg.__wbg_setonclose_14fc475a49d488fc = function(arg0, arg1) {
         arg0.onclose = arg1;
     };
@@ -527,6 +632,10 @@ function __wbg_get_imports() {
         const ret = typeof window === 'undefined' ? null : window;
         return isLikeNone(ret) ? 0 : addToExternrefTable0(ret);
     };
+    imports.wbg.__wbg_stringify_f7ed6987935b4a24 = function() { return handleError(function (arg0) {
+        const ret = JSON.stringify(arg0);
+        return ret;
+    }, arguments) };
     imports.wbg.__wbg_warn_aaf1f4664a035bd6 = function(arg0, arg1, arg2, arg3) {
         console.warn(arg0, arg1, arg2, arg3);
     };
@@ -534,20 +643,25 @@ function __wbg_get_imports() {
         const ret = arg0.width;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper83 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 5, __wbg_adapter_20);
+    imports.wbg.__wbindgen_boolean_get = function(arg0) {
+        const v = arg0;
+        const ret = typeof(v) === 'boolean' ? (v ? 1 : 0) : 2;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper85 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 5, __wbg_adapter_20);
+    imports.wbg.__wbindgen_closure_wrapper276 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 86, __wbg_adapter_35);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper87 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 5, __wbg_adapter_20);
+    imports.wbg.__wbindgen_closure_wrapper61 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 3, __wbg_adapter_28);
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper89 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 5, __wbg_adapter_20);
+    imports.wbg.__wbindgen_closure_wrapper63 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 3, __wbg_adapter_28);
+        return ret;
+    };
+    imports.wbg.__wbindgen_closure_wrapper65 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 3, __wbg_adapter_28);
         return ret;
     };
     imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {
@@ -567,12 +681,26 @@ function __wbg_get_imports() {
         table.set(offset + 3, false);
         ;
     };
+    imports.wbg.__wbindgen_is_null = function(arg0) {
+        const ret = arg0 === null;
+        return ret;
+    };
     imports.wbg.__wbindgen_is_string = function(arg0) {
         const ret = typeof(arg0) === 'string';
         return ret;
     };
     imports.wbg.__wbindgen_is_undefined = function(arg0) {
         const ret = arg0 === undefined;
+        return ret;
+    };
+    imports.wbg.__wbindgen_number_get = function(arg0, arg1) {
+        const obj = arg1;
+        const ret = typeof(obj) === 'number' ? obj : undefined;
+        getDataViewMemory0().setFloat64(arg0 + 8 * 1, isLikeNone(ret) ? 0 : ret, true);
+        getDataViewMemory0().setInt32(arg0 + 4 * 0, !isLikeNone(ret), true);
+    };
+    imports.wbg.__wbindgen_number_new = function(arg0) {
+        const ret = arg0;
         return ret;
     };
     imports.wbg.__wbindgen_string_get = function(arg0, arg1) {

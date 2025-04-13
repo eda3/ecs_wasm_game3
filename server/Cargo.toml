@@ -1,0 +1,27 @@
+[package]
+name = "ecs_wasm_game_server"
+version = "0.1.0"
+edition = "2021"
+authors = ["ECS Wasm Game Developer"]
+description = "Server for multiplayer game using custom ECS"
+
+[dependencies]
+tokio = { version = "1.28", features = ["full"] }
+tokio-tungstenite = "0.19"
+actix-web = "4.3"
+actix-files = "0.6"
+futures = "0.3"
+futures-util = "0.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+uuid = { version = "1.4", features = ["v4", "serde"] }
+log = "0.4"
+env_logger = "0.10"
+rand = "0.8"
+dashmap = "5.4"
+thiserror = "1.0"
+anyhow = "1.0"
+config = "0.13"
+
+[dev-dependencies]
+tokio-test = "0.4" 
