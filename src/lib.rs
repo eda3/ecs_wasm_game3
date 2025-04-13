@@ -1,5 +1,10 @@
 use wasm_bindgen::prelude::*;
 use web_sys::console;
+use std::sync::Mutex;
+use std::rc::{Rc, Weak};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use lazy_static::lazy_static;
 
 // モジュール宣言
 pub mod ecs;
@@ -10,9 +15,20 @@ pub mod input;
 pub mod network;
 pub mod utils;
 
+// グローバルクライアント管理用
+lazy_static! {
+    static ref NETWORK_CLIENTS: Mutex<HashMap<String, Rc<RefCell<network::client::NetworkClient>>>> = 
+        Mutex::new(HashMap::new());
+    static ref GAME_INSTANCES: Mutex<HashMap<String, Weak<RefCell<GameInstance>>>> = 
+        Mutex::new(HashMap::new());
+}
+
 // 初期化用のエントリーポイント
 #[wasm_bindgen(start)]
 pub fn start() {
+    // エラーをコンソールにパニックフックとして表示
+    console_error_panic_hook::set_once();
+    
     // ロガーの初期化
     wasm_logger::init(wasm_logger::Config::default());
     log::info!("WebAssembly module initialized!");
@@ -37,8 +53,10 @@ pub fn initialize_game(canvas_id: &str) -> Result<GameInstance, JsValue> {
 pub struct GameInstance {
     // ゲームワールドやリソースへの参照を保持する
     world: ecs::World,
-    network_client: Option<network::client::NetworkClient>,
+    // 直接参照ではなく、IDで参照する
+    network_client_id: Option<String>,
     last_update_time: f64,
+    instance_id: String,
 }
 
 #[wasm_bindgen]
@@ -62,10 +80,28 @@ impl GameInstance {
         // ゲームシステムの初期化
         game::init_game_systems(&mut world);
         
-        Ok(GameInstance {
+        // インスタンスIDを生成
+        let instance_id = format!("game_{}", js_sys::Date::now());
+        
+        // インスタンスを作成
+        let instance = GameInstance {
             world,
-            network_client: None,
+            network_client_id: None,
             last_update_time: js_sys::Date::now(),
+            instance_id: instance_id.clone(),
+        };
+        
+        // グローバルストアに弱参照として保存
+        let rc_instance = Rc::new(RefCell::new(instance));
+        let weak_ref = Rc::downgrade(&rc_instance);
+        GAME_INSTANCES.lock().unwrap().insert(instance_id, weak_ref);
+        
+        // インスタンスを返す
+        Ok(GameInstance {
+            world: ecs::World::new(),
+            network_client_id: None,
+            last_update_time: js_sys::Date::now(),
+            instance_id,
         })
     }
     
@@ -74,31 +110,52 @@ impl GameInstance {
     pub fn connect_to_server(&mut self, server_url: &str) -> Result<(), JsValue> {
         log::info!("Connecting to server: {}", server_url);
         
+        // 既存の接続があれば削除
+        if let Some(client_id) = &self.network_client_id {
+            NETWORK_CLIENTS.lock().unwrap().remove(client_id);
+        }
+        
+        // 新しいクライアントIDを生成
+        let client_id = format!("client_{}", js_sys::Date::now());
+        
         // ネットワーク設定の作成
         let network_config = network::NetworkConfig {
             server_url: server_url.to_string(),
             ..Default::default()
         };
         
-        // ネットワーククライアントの作成
-        let mut client = network::client::NetworkClient::new(network_config);
+        // ネットワーククライアントの作成（循環参照なし）
+        let client = network::client::NetworkClient::new(network_config);
         
-        // サーバーへの接続を試行
-        match client.connect() {
-            Ok(_) => {
-                log::info!("Connection initiated successfully");
-                self.network_client = Some(client);
+        // グローバルマップに保存
+        NETWORK_CLIENTS.lock().unwrap().insert(client_id.clone(), Rc::new(RefCell::new(client)));
+        self.network_client_id = Some(client_id.clone());
+        
+        // クライアントの接続を試行
+        {
+            let clients = NETWORK_CLIENTS.lock().unwrap();
+            if let Some(client_rc) = clients.get(&client_id) {
+                let mut client = client_rc.borrow_mut();
                 
-                // ネットワークコンポーネントをワールドに追加
-                let network_resource = network::NetworkResource::new(server_url.to_string());
-                self.world.insert_resource(network_resource);
-                
-                Ok(())
-            },
-            Err(err) => {
-                let error_msg = format!("Failed to connect: {:?}", err);
-                log::error!("{}", error_msg);
-                Err(JsValue::from_str(&error_msg))
+                // 接続を試行
+                match client.connect() {
+                    Ok(_) => {
+                        log::info!("Connection initiated successfully");
+                        
+                        // ネットワークコンポーネントをワールドに追加
+                        let network_resource = network::NetworkResource::new(server_url.to_string());
+                        self.world.insert_resource(network_resource);
+                        
+                        Ok(())
+                    },
+                    Err(err) => {
+                        let error_msg = format!("Failed to connect: {:?}", err);
+                        log::error!("{}", error_msg);
+                        Err(JsValue::from_str(&error_msg))
+                    }
+                }
+            } else {
+                Err(JsValue::from_str("Failed to store network client"))
             }
         }
     }
@@ -106,18 +163,24 @@ impl GameInstance {
     // サーバーから切断
     #[wasm_bindgen]
     pub fn disconnect_from_server(&mut self) -> Result<(), JsValue> {
-        if let Some(client) = &mut self.network_client {
-            match client.disconnect() {
-                Ok(_) => {
-                    log::info!("Disconnected from server");
-                    self.network_client = None;
-                    Ok(())
-                },
-                Err(err) => {
-                    let error_msg = format!("Failed to disconnect: {:?}", err);
-                    log::error!("{}", error_msg);
-                    Err(JsValue::from_str(&error_msg))
+        if let Some(client_id) = &self.network_client_id {
+            let clients = NETWORK_CLIENTS.lock().unwrap();
+            if let Some(client_rc) = clients.get(client_id) {
+                let mut client = client_rc.borrow_mut();
+                match client.disconnect() {
+                    Ok(_) => {
+                        log::info!("Disconnected from server");
+                        self.network_client_id = None;
+                        Ok(())
+                    },
+                    Err(err) => {
+                        let error_msg = format!("Failed to disconnect: {:?}", err);
+                        log::error!("{}", error_msg);
+                        Err(JsValue::from_str(&error_msg))
+                    }
                 }
+            } else {
+                Ok(()) // クライアントが既に存在しない
             }
         } else {
             Ok(()) // 既に切断済み
@@ -127,17 +190,23 @@ impl GameInstance {
     // 接続状態を取得
     #[wasm_bindgen]
     pub fn get_connection_state(&self) -> String {
-        if let Some(client) = &self.network_client {
-            match client.get_connection_state() {
-                network::ConnectionState::Connected => "connected",
-                network::ConnectionState::Connecting => "connecting",
-                network::ConnectionState::Disconnected => "disconnected",
-                network::ConnectionState::Disconnecting => "disconnecting",
-                network::ConnectionState::Error(msg) => {
-                    log::error!("Connection error: {}", msg);
-                    "error"
-                }
-            }.to_string()
+        if let Some(client_id) = &self.network_client_id {
+            let clients = NETWORK_CLIENTS.lock().unwrap();
+            if let Some(client_rc) = clients.get(client_id) {
+                let client = client_rc.borrow();
+                match client.get_connection_state() {
+                    network::ConnectionState::Connected => "connected",
+                    network::ConnectionState::Connecting => "connecting",
+                    network::ConnectionState::Disconnected => "disconnected",
+                    network::ConnectionState::Disconnecting => "disconnecting",
+                    network::ConnectionState::Error(msg) => {
+                        log::error!("Connection error: {}", msg);
+                        "error"
+                    }
+                }.to_string()
+            } else {
+                "disconnected".to_string()
+            }
         } else {
             "disconnected".to_string()
         }
@@ -146,19 +215,32 @@ impl GameInstance {
     // ゲームのメインループを1フレーム進める
     #[wasm_bindgen]
     pub fn update(&mut self) -> f32 {
-        // フレーム間の時間を計算
+        // フレーム間の時間を計算（安全対策付き）
         let current_time = js_sys::Date::now();
-        let delta_time = (current_time - self.last_update_time) as f32 / 1000.0;
+        let mut delta_time = (current_time - self.last_update_time) as f32 / 1000.0;
+        
+        // デルタタイムを安全な範囲に制限
+        if delta_time.is_nan() || delta_time <= 0.0 || delta_time > 0.5 {
+            delta_time = 0.016; // ~60FPS相当のデフォルト値
+        }
+        
         self.last_update_time = current_time;
         
-        // ネットワーククライアントの更新
-        if let Some(client) = &mut self.network_client {
-            if let Err(err) = client.update(&mut self.world) {
-                log::warn!("Network update error: {:?}", err);
+        // ネットワーククライアントの更新（安全な方法で）
+        if let Some(client_id) = &self.network_client_id {
+            let clients = NETWORK_CLIENTS.lock().unwrap();
+            if let Some(client_rc) = clients.get(client_id) {
+                let mut client = client_rc.borrow_mut();
+                
+                // エラー処理を強化
+                if let Err(err) = client.update(&mut self.world) {
+                    log::warn!("Network update error: {:?}", err);
+                    // エラーが発生しても続行
+                }
             }
         }
         
-        // ワールドの更新
+        // ワールドの更新（安全に）
         self.world.update(delta_time);
         
         // デルタタイムを返す（パフォーマンスメトリクス用）
@@ -213,5 +295,23 @@ impl GameInstance {
         // InputResourceからInputSystemを取得する
         self.world.get_resource_mut::<input::InputResource>()
             .map(|input_resource| &mut input_resource.system)
+    }
+    
+    // 解放時の処理
+    #[wasm_bindgen]
+    pub fn dispose(&mut self) {
+        // インスタンスをグローバルマップから削除
+        GAME_INSTANCES.lock().unwrap().remove(&self.instance_id);
+        
+        // ネットワーククライアントを切断して削除
+        if let Some(client_id) = self.network_client_id.take() {
+            let clients = NETWORK_CLIENTS.lock().unwrap();
+            if let Some(client_rc) = clients.get(&client_id) {
+                let mut client = client_rc.borrow_mut();
+                let _ = client.disconnect(); // エラーは無視
+            }
+            drop(clients);
+            NETWORK_CLIENTS.lock().unwrap().remove(&client_id);
+        }
     }
 }

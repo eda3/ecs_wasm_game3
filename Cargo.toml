@@ -28,6 +28,8 @@ wasm-bindgen = { version = "0.2.100" }
 wasm-bindgen-futures = "0.4"
 futures = "0.3"
 ecs_derive = { path = "./ecs_derive" }
+console_error_panic_hook = "0.1"
+lazy_static = "1.4"
 
 [dev-dependencies]
 wasm-bindgen-test = "0.3.37"
