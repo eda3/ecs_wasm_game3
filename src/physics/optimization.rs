@@ -10,6 +10,7 @@ use crate::physics::{PhysicsEntity, Collision, collision::detect_collision};
 /// 
 /// 2次元空間を均一なグリッドセルに分割し、エンティティの空間的な近接性を効率的に
 /// 判断するためのデータ構造です。これにより、潜在的な衝突ペアの数を大幅に削減できます。
+#[derive(Clone)]
 pub struct SpatialGrid {
     /// セルのサイズ
     cell_size: f64,
@@ -150,6 +151,7 @@ impl SpatialGrid {
 /// 
 /// エンティティ間の衝突を選択的に制御するためのフィルタリングシステムです。
 /// カテゴリとマスクを使用して、特定のエンティティ間の衝突を有効/無効にできます。
+#[derive(Clone)]
 pub struct CollisionFilter {
     /// 衝突フィルターのマスク（キー: エンティティID, 値: フィルターマスク）
     masks: HashMap<u32, u32>,
