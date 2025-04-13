@@ -93,14 +93,20 @@ impl System for ClientPrediction {
         // リモートエンティティのクエリ - query_tupleを使用して修正
         let mut base_query = world.query_tuple::<NetworkComponent>();
         let query = base_query.filter(|_, network| network.is_synced && network.is_remote);
-            
-        for (entity, network) in query.iter(world) {
-            // 予測データを初期化（存在しない場合）
-            let prediction_data = self.prediction_data
-                .entry(entity)
-                .or_insert_with(PredictionData::default)
-                .clone(); // クローンして所有権問題を回避
-            
+        
+        // エンティティと予測データを事前に収集してから処理
+        let entities_to_predict: Vec<(Entity, PredictionData)> = query.iter(world)
+            .map(|(entity, _network)| {
+                let prediction_data = self.prediction_data
+                    .entry(entity)
+                    .or_insert_with(PredictionData::default)
+                    .clone();
+                (entity, prediction_data)
+            })
+            .collect();
+        
+        // 収集したデータを使って処理
+        for (entity, prediction_data) in entities_to_predict {
             self.predict_entity_state(world, entity, &prediction_data, delta_time);
         }
         
