@@ -1375,7 +1375,7 @@ impl NetworkQualityMonitor {
             
             for &sample in &self.rtt_samples {
                 if let Some(p) = prev {
-                    jitter_sum += (sample - p).abs();
+                    jitter_sum += (sample - p).abs() as f64;
                 }
                 prev = Some(sample);
             }

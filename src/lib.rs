@@ -210,7 +210,8 @@ impl GameInstance {
     
     // 入力システムを取得
     fn get_input_system(&mut self) -> Option<&mut input::InputSystem> {
-        // 実装例: WorldからInputSystemを取得する方法
-        self.world.get_resource_mut::<input::InputSystem>()
+        // InputResourceからInputSystemを取得する
+        self.world.get_resource_mut::<input::InputResource>()
+            .map(|input_resource| &mut input_resource.system)
     }
 }
