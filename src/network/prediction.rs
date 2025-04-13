@@ -1290,6 +1290,12 @@ pub struct InputProcessor {
     // 入力処理に必要なデータ
 }
 
+impl Component for InputProcessor {
+    fn name() -> &'static str {
+        "InputProcessor"
+    }
+}
+
 impl InputProcessor {
     /// 新しい入力処理コンポーネントを作成
     pub fn new() -> Self {
