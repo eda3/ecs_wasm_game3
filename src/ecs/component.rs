@@ -29,6 +29,9 @@ pub trait ComponentStorage {
 
     /// 内部ストレージを可変Any型として取得
     fn as_any_mut(&mut self) -> &mut dyn Any;
+    
+    /// このストレージに格納されているすべてのエンティティIDのベクターを返す
+    fn entity_ids(&self) -> Vec<EntityId>;
 }
 
 /// 特定の型Tに対するコンポーネントストレージの実装
@@ -129,6 +132,10 @@ impl<T: Component> ComponentStorage for VecStorage<T> {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+    
+    fn entity_ids(&self) -> Vec<EntityId> {
+        self.data.iter().map(|(entity_id, _)| *entity_id).collect()
     }
 }
 
@@ -243,5 +250,27 @@ impl ComponentManager {
         for storage in self.storages.values_mut() {
             storage.remove(entity.id());
         }
+    }
+
+    /// すべてのエンティティIDを収集
+    pub fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
+        // すべてのコンポーネントストレージを検索して、一意なエンティティIDのセットを作成
+        let mut entity_set = std::collections::HashSet::new();
+        
+        // すべてのストレージからエンティティIDを収集
+        for storage in self.storages.values() {
+            for entity_id in storage.entity_ids() {
+                entity_set.insert(entity_id);
+            }
+        }
+        
+        // 一意なエンティティIDをEntityインスタンスに変換
+        entity_set.into_iter().map(|id| {
+            // EntityIdからEntityインスタンスを再構築
+            Entity {
+                id,
+                generation: 0, // 実際のgenerationは不明だが、IDの一致には十分
+            }
+        })
     }
 } 

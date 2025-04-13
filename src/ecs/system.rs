@@ -163,6 +163,11 @@ impl SystemProcessor {
     pub fn remove_resource<T: Resource>(&mut self) -> Option<T> {
         self.resource_manager.remove::<T>()
     }
+
+    /// 全エンティティを取得するイテレータを返す
+    pub fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.component_manager.entities()
+    }
 }
 
 /// システムビルダー

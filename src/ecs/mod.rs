@@ -137,6 +137,11 @@ impl World {
     pub fn processor_mut(&mut self) -> &mut SystemProcessor {
         &mut self.processor
     }
+
+    /// 全エンティティを取得するイテレータを返す
+    pub fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
+        self.processor.entities()
+    }
 }
 
 // ECSの初期化関数
