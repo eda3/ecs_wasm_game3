@@ -140,16 +140,54 @@ impl NetworkMessage {
         let obj = js_sys::Object::new();
         
         match &self.message_type {
-            MessageType::Connect => { js_sys::Reflect::set(&obj, &"type".into(), &"connect".into())?; },
+            MessageType::Connect => { js_sys::Reflect::set(&obj, &"type".into(), &"Connect".into())?; },
             MessageType::ConnectResponse { player_id, success, message } => {
-                js_sys::Reflect::set(&obj, &"type".into(), &"connect_response".into())?;
+                js_sys::Reflect::set(&obj, &"type".into(), &"ConnectResponse".into())?;
                 js_sys::Reflect::set(&obj, &"player_id".into(), &(*player_id).into())?;
                 js_sys::Reflect::set(&obj, &"success".into(), &(*success).into())?;
                 if let Some(msg) = message {
                     js_sys::Reflect::set(&obj, &"message".into(), &msg.into())?;
                 }
             },
-            _ => { js_sys::Reflect::set(&obj, &"type".into(), &"unknown".into())?; }
+            MessageType::Disconnect { reason } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"Disconnect".into())?;
+                if let Some(r) = reason {
+                    js_sys::Reflect::set(&obj, &"reason".into(), &r.into())?;
+                }
+            },
+            MessageType::EntityCreate { entity_id } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"EntityCreate".into())?;
+                js_sys::Reflect::set(&obj, &"entity_id".into(), &(*entity_id).into())?;
+            },
+            MessageType::EntityDelete { entity_id } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"EntityDelete".into())?;
+                js_sys::Reflect::set(&obj, &"entity_id".into(), &(*entity_id).into())?;
+            },
+            MessageType::ComponentUpdate => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"ComponentUpdate".into())?;
+            },
+            MessageType::Input => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"Input".into())?;
+            },
+            MessageType::TimeSync { client_time, server_time } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"TimeSync".into())?;
+                js_sys::Reflect::set(&obj, &"client_time".into(), &(*client_time).into())?;
+                js_sys::Reflect::set(&obj, &"server_time".into(), &(*server_time).into())?;
+            },
+            MessageType::Ping { client_time } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"Ping".into())?;
+                js_sys::Reflect::set(&obj, &"client_time".into(), &(*client_time).into())?;
+            },
+            MessageType::Pong { client_time, server_time } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"Pong".into())?;
+                js_sys::Reflect::set(&obj, &"client_time".into(), &(*client_time).into())?;
+                js_sys::Reflect::set(&obj, &"server_time".into(), &(*server_time).into())?;
+            },
+            MessageType::Error { code, message } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"Error".into())?;
+                js_sys::Reflect::set(&obj, &"code".into(), &(*code).into())?;
+                js_sys::Reflect::set(&obj, &"message".into(), &message.into())?;
+            },
         }
         
         if let Some(seq) = self.sequence {
@@ -163,6 +201,78 @@ impl NetworkMessage {
             js_sys::Reflect::set(&obj, &"player_id".into(), &(player_id as u32).into())?;
         }
         
+        // コンポーネントデータ
+        if let Some(ref components) = self.components {
+            let components_obj = js_sys::Object::new();
+            for (name, data) in components {
+                // 各コンポーネントのJSONオブジェクトを作成し追加
+                let component_obj = js_sys::Object::new();
+                
+                // データ型に応じて適切なプロパティをセット
+                match data {
+                    // 実際の実装では、ComponentDataの内容に応じて設定
+                    _ => {}
+                }
+                
+                js_sys::Reflect::set(&components_obj, &name.into(), &component_obj)?;
+            }
+            js_sys::Reflect::set(&obj, &"components".into(), &components_obj)?;
+        }
+        
+        // 入力データ
+        if let Some(ref input) = self.input_data {
+            let input_obj = js_sys::Object::new();
+            
+            // 移動入力
+            let movement_array = js_sys::Array::new();
+            movement_array.push(&input.movement.0.into());
+            movement_array.push(&input.movement.1.into());
+            js_sys::Reflect::set(&input_obj, &"movement".into(), &movement_array)?;
+            
+            // アクション入力
+            let actions_obj = js_sys::Object::new();
+            for (action, state) in &input.actions {
+                js_sys::Reflect::set(&actions_obj, &action.into(), &(*state).into())?;
+            }
+            js_sys::Reflect::set(&input_obj, &"actions".into(), &actions_obj)?;
+            
+            // 照準座標(存在する場合)
+            if let Some((x, y)) = input.aim {
+                let aim_array = js_sys::Array::new();
+                aim_array.push(&x.into());
+                aim_array.push(&y.into());
+                js_sys::Reflect::set(&input_obj, &"aim".into(), &aim_array)?;
+            }
+            
+            // タイムスタンプ
+            js_sys::Reflect::set(&input_obj, &"timestamp".into(), &input.timestamp.into())?;
+            
+            js_sys::Reflect::set(&obj, &"input_data".into(), &input_obj)?;
+        }
+        
+        // プレイヤーデータ
+        if let Some(ref player) = self.player_data {
+            let player_obj = js_sys::Object::new();
+            
+            js_sys::Reflect::set(&player_obj, &"name".into(), &player.name.clone().into())?;
+            
+            if let Some(ref avatar) = player.avatar {
+                js_sys::Reflect::set(&player_obj, &"avatar".into(), &avatar.into())?;
+            }
+            
+            if let Some(team) = player.team {
+                js_sys::Reflect::set(&player_obj, &"team".into(), &team.into())?;
+            }
+            
+            if let Some(ref settings) = player.settings {
+                let settings_obj = js_sys::Object::new();
+                // 設定データの処理
+                js_sys::Reflect::set(&player_obj, &"settings".into(), &settings_obj)?;
+            }
+            
+            js_sys::Reflect::set(&obj, &"player_data".into(), &player_obj)?;
+        }
+        
         let json = JSON::stringify(&obj).map_err(|e| {
             JsValue::from_str(&format!("JSON文字列化エラー: {:?}", e))
         })?;
@@ -174,21 +284,93 @@ impl NetworkMessage {
 fn extract_message_type(obj: &js_sys::Object) -> Result<MessageType, JsValue> {
     let type_key = JsValue::from_str("type");
     if !js_sys::Reflect::has(obj, &type_key)? {
-        return Err(JsValue::from_str("メッセージタイプが見つかりません"));
+        // オブジェクトのすべてのキーを取得してデバッグ情報に追加
+        let keys = js_sys::Object::keys(obj);
+        let keys_length = keys.length();
+        let mut keys_str = String::new();
+        
+        for i in 0..keys_length {
+            if let Some(key) = keys.get(i).as_string() {
+                if !keys_str.is_empty() {
+                    keys_str.push_str(", ");
+                }
+                keys_str.push_str(&key);
+            }
+        }
+        
+        return Err(JsValue::from_str(&format!(
+            "メッセージタイプが見つかりません。利用可能なキー: [{}]", 
+            if keys_str.is_empty() { "なし" } else { &keys_str }
+        )));
     }
     
     let type_value = js_sys::Reflect::get(obj, &type_key)?;
-    let type_str = type_value.as_string().unwrap_or_default();
+    if type_value.is_undefined() || type_value.is_null() {
+        return Err(JsValue::from_str("typeフィールドが存在しますが、値がnullまたはundefinedです"));
+    }
     
-    match type_str.as_str() {
+    let type_str = match type_value.as_string() {
+        Some(s) => s,
+        None => {
+            // 文字列でない場合、型情報を詳細に出力
+            let type_of = type_value.js_typeof().as_string().unwrap_or_default();
+            return Err(JsValue::from_str(&format!(
+                "typeフィールドが文字列ではありません。実際の型: {}, 値: {:?}", 
+                type_of, type_value
+            )));
+        }
+    };
+    
+    // 大文字小文字を無視するために小文字に変換
+    let type_lower = type_str.to_lowercase();
+    
+    web_sys::console::log_1(&format!("メッセージタイプ解析中: {}", type_str).into());
+    
+    match type_lower.as_str() {
         "connect" => Ok(MessageType::Connect),
-        "connect_response" => {
+        "connectresponse" => {
             let player_id = extract_number(obj, "player_id")?.unwrap_or(0.0) as u32;
             let success = extract_boolean(obj, "success")?.unwrap_or(false);
             let message = extract_string(obj, "message")?;
             Ok(MessageType::ConnectResponse { player_id, success, message })
         },
-        _ => Err(JsValue::from_str(&format!("未知のメッセージタイプ: {}", type_str)))
+        "disconnect" => {
+            let reason = extract_string(obj, "reason")?;
+            Ok(MessageType::Disconnect { reason })
+        },
+        "entitycreate" => {
+            let entity_id = extract_number(obj, "entity_id")?.unwrap_or(0.0) as u32;
+            Ok(MessageType::EntityCreate { entity_id })
+        },
+        "entitydelete" => {
+            let entity_id = extract_number(obj, "entity_id")?.unwrap_or(0.0) as u32;
+            Ok(MessageType::EntityDelete { entity_id })
+        },
+        "componentupdate" => Ok(MessageType::ComponentUpdate),
+        "input" => Ok(MessageType::Input),
+        "timesync" => {
+            let client_time = extract_number(obj, "client_time")?.unwrap_or(0.0);
+            let server_time = extract_number(obj, "server_time")?.unwrap_or(0.0);
+            Ok(MessageType::TimeSync { client_time, server_time })
+        },
+        "ping" => {
+            let client_time = extract_number(obj, "client_time")?.unwrap_or(0.0);
+            Ok(MessageType::Ping { client_time })
+        },
+        "pong" => {
+            let client_time = extract_number(obj, "client_time")?.unwrap_or(0.0);
+            let server_time = extract_number(obj, "server_time")?.unwrap_or(0.0);
+            Ok(MessageType::Pong { client_time, server_time })
+        },
+        "error" => {
+            let code = extract_number(obj, "code")?.unwrap_or(0.0) as u32;
+            let message = extract_string(obj, "message")?.unwrap_or_default();
+            Ok(MessageType::Error { code, message })
+        },
+        _ => {
+            web_sys::console::error_1(&format!("未知のメッセージタイプ: {}", type_str).into());
+            Err(JsValue::from_str(&format!("未知のメッセージタイプ: {}", type_str)))
+        }
     }
 }
 

@@ -133,16 +133,59 @@ impl NetworkClient {
             let client = unsafe { &mut *on_message_client.borrow_mut() };
             if let Ok(text) = event.data().dyn_into::<js_sys::JsString>() {
                 let text_str = String::from(text);
+                
+                // デバッグログ: 受信メッセージの内容を表示
+                web_sys::console::log_1(&format!("受信メッセージ(生): {}", text_str).into());
+                
                 match NetworkMessage::from_json(&text_str) {
                     Ok(message) => {
+                        // デバッグログ: パース成功とメッセージタイプを表示
+                        web_sys::console::log_1(&format!("メッセージ解析成功: タイプ={:?}", message.message_type).into());
                         unsafe {
                             (*(*client)).message_queue.push_back(message);
                         }
                     },
                     Err(err) => {
+                        // エラーログを詳細化
                         web_sys::console::error_1(&format!("メッセージの解析エラー: {:?}", err).into());
+                        
+                        // JSON構造を詳細にチェック
+                        if let Ok(obj) = js_sys::JSON::parse(&text_str) {
+                            if obj.is_object() {
+                                let obj = js_sys::Object::from(obj);
+                                let has_type = js_sys::Reflect::has(&obj, &"type".into()).unwrap_or(false);
+                                web_sys::console::log_1(&format!("受信JSONにtypeフィールドがある: {}", has_type).into());
+                                
+                                if has_type {
+                                    if let Ok(type_val) = js_sys::Reflect::get(&obj, &"type".into()) {
+                                        web_sys::console::log_1(&format!("typeフィールドの値: {:?}", type_val).into());
+                                    }
+                                }
+                            } else {
+                                web_sys::console::error_1(&"受信データはJSONオブジェクトではありません".into());
+                            }
+                        } else {
+                            web_sys::console::error_1(&"受信データは有効なJSONではありません".into());
+                        }
                     }
                 }
+            } else {
+                // テキスト以外のデータを受信した場合
+                web_sys::console::error_1(&"非テキストメッセージを受信しました".into());
+                
+                // データ型の詳細を出力
+                let data_type = match event.data().js_typeof().as_string().unwrap_or_default().as_str() {
+                    "string" => "文字列",
+                    "object" => "オブジェクト",
+                    "boolean" => "真偽値",
+                    "number" => "数値",
+                    "undefined" => "未定義",
+                    "function" => "関数",
+                    "symbol" => "シンボル",
+                    "bigint" => "BigInt",
+                    _ => "不明"
+                };
+                web_sys::console::log_1(&format!("受信データ型: {}", data_type).into());
             }
         }) as Box<dyn FnMut(MessageEvent)>);
 

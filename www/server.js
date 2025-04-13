@@ -117,7 +117,7 @@ URL: ${clientUrl}
 
     // 接続成功メッセージを送信（新しいプロトコル形式）
     socket.send(JSON.stringify({
-        message_type: MessageType.CONNECT_RESPONSE,
+        type: MessageType.CONNECT_RESPONSE,
         sequence: 1,
         timestamp: Date.now(),
         player_id: clientId,
@@ -143,7 +143,7 @@ URL: ${clientUrl}
 
     // クライアントに自分のエンティティ作成を通知
     socket.send(JSON.stringify({
-        message_type: MessageType.ENTITY_CREATE,
+        type: MessageType.ENTITY_CREATE,
         sequence: 2,
         timestamp: Date.now(),
         entity_id: playerEntityId
@@ -151,7 +151,7 @@ URL: ${clientUrl}
 
     // クライアントにエンティティのコンポーネントを送信
     socket.send(JSON.stringify({
-        message_type: MessageType.COMPONENT_UPDATE,
+        type: MessageType.COMPONENT_UPDATE,
         sequence: 3,
         timestamp: Date.now(),
         entity_id: playerEntityId,
@@ -160,7 +160,7 @@ URL: ${clientUrl}
 
     // 他のクライアントに新しいプレイヤーの参加を通知
     broadcastToAll({
-        message_type: MessageType.ENTITY_CREATE,
+        type: MessageType.ENTITY_CREATE,
         sequence: 4,
         timestamp: Date.now(),
         entity_id: playerEntityId
@@ -168,7 +168,7 @@ URL: ${clientUrl}
 
     // 他のクライアントに新しいプレイヤーのコンポーネント情報を送信
     broadcastToAll({
-        message_type: MessageType.COMPONENT_UPDATE,
+        type: MessageType.COMPONENT_UPDATE,
         sequence: 5,
         timestamp: Date.now(),
         entity_id: playerEntityId,
@@ -182,7 +182,7 @@ URL: ${clientUrl}
 
         // エンティティ作成を通知
         socket.send(JSON.stringify({
-            message_type: MessageType.ENTITY_CREATE,
+            type: MessageType.ENTITY_CREATE,
             sequence: nextSequence(),
             timestamp: Date.now(),
             entity_id: entityId
@@ -190,7 +190,7 @@ URL: ${clientUrl}
 
         // コンポーネント情報を送信
         socket.send(JSON.stringify({
-            message_type: MessageType.COMPONENT_UPDATE,
+            type: MessageType.COMPONENT_UPDATE,
             sequence: nextSequence(),
             timestamp: Date.now(),
             entity_id: entityId,
@@ -202,13 +202,14 @@ URL: ${clientUrl}
     socket.on('message', (message) => {
         try {
             const data = JSON.parse(message);
-            console.log(`📩 クライアント #${clientId} からメッセージ:`, data.message_type || 'unknown');
+            const messageType = data.type || data.message_type || 'unknown';
+            console.log(`📩 クライアント #${clientId} からメッセージ:`, messageType);
 
             // クライアントのアクティビティ時間を更新
             clients.get(clientId).lastActivity = Date.now();
 
             // メッセージタイプに応じた処理
-            switch (data.message_type) {
+            switch (messageType) {
                 case MessageType.INPUT:
                     // 入力データを処理
                     handleInputMessage(clientId, data);
@@ -217,7 +218,7 @@ URL: ${clientUrl}
                 case MessageType.PING:
                     // Pingには即座にPongで応答
                     socket.send(JSON.stringify({
-                        message_type: MessageType.PONG,
+                        type: MessageType.PONG,
                         sequence: nextSequence(),
                         timestamp: Date.now(),
                         client_time: data.client_time,
@@ -228,7 +229,7 @@ URL: ${clientUrl}
                 case MessageType.TIME_SYNC:
                     // 時間同期要求に応答
                     socket.send(JSON.stringify({
-                        message_type: MessageType.TIME_SYNC,
+                        type: MessageType.TIME_SYNC,
                         sequence: nextSequence(),
                         timestamp: Date.now(),
                         client_time: data.client_time,
@@ -242,7 +243,7 @@ URL: ${clientUrl}
                     break;
 
                 default:
-                    console.log(`⚠️ 未処理のメッセージタイプ: ${data.message_type}`);
+                    console.log(`⚠️ 未処理のメッセージタイプ: ${messageType}`);
             }
         } catch (error) {
             console.error(`⚠️ メッセージ処理エラー (クライアント #${clientId}):`, error.message);
@@ -298,7 +299,7 @@ function handleInputMessage(clientId, data) {
 
             // 更新されたコンポーネント情報をブロードキャスト
             broadcastToAll({
-                message_type: MessageType.COMPONENT_UPDATE,
+                type: MessageType.COMPONENT_UPDATE,
                 sequence: nextSequence(),
                 timestamp: Date.now(),
                 entity_id: entityId,
@@ -322,7 +323,7 @@ function handleClientDisconnect(clientId, reason) {
     for (const entityId of client.entities) {
         // 他のクライアントにエンティティ削除を通知
         broadcastToAll({
-            message_type: MessageType.ENTITY_DELETE,
+            type: MessageType.ENTITY_DELETE,
             sequence: nextSequence(),
             timestamp: Date.now(),
             entity_id: entityId
@@ -380,7 +381,7 @@ function shutdown() {
 
     // すべてのクライアントに通知してから切断
     broadcastToAll({
-        message_type: MessageType.ERROR,
+        type: MessageType.ERROR,
         sequence: nextSequence(),
         timestamp: Date.now(),
         code: 1001,
