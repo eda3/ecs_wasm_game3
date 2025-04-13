@@ -172,21 +172,22 @@ impl GameInstance {
         self.world.render();
     }
     
-    // キー入力を処理
-    #[wasm_bindgen]
-    pub fn handle_key_event(&mut self, event_type: &str, key_code: &str) {
-        // 入力システムにイベントを送信
-        let event = input::KeyboardEvent {
-            event_type: event_type.to_string(),
-            key: key_code.to_string(),
-        };
-        
-        // 入力システムを取得して処理を委譲
-        if let Some(input_system) = self.get_input_system() {
-            input_system.handle_keyboard_event(&event);
-        } else {
-            log::warn!("入力システムが見つかりません");
+    /// キーイベントを処理
+    pub fn handle_key_event(&mut self, key_code: u32) -> Result<(), JsValue> {
+        // InputSystem取得方法の修正
+        if let Some(input_resource) = self.world.get_resource_mut::<input::InputResource>() {
+            // 適切なInputResource経由でキーイベントを処理
+            let event = input::KeyboardEvent {
+                key: key_code.to_string(),
+                event_type: "keydown".to_string(),
+            };
+            input_resource.handle_keyboard_event(&event);
+            return Ok(())
         }
+        
+        // InputSystemが見つからない場合のエラー処理
+        log::warn!("InputSystem not found, key event ignored");
+        Ok(())
     }
     
     // マウス入力を処理

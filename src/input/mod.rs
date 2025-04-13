@@ -8,8 +8,9 @@ use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 use wasm_bindgen::prelude::*;
 use web_sys::KeyboardEvent as WebKeyboardEvent;
+use wasm_bindgen::JsValue;
 
-use crate::ecs::{Entity, System, World, SystemPhase, SystemPriority, ResourceManager};
+use crate::ecs::{Entity, System, World, SystemPhase, SystemPriority, ResourceManager, Resource};
 use crate::ecs::component::Component;
 use crate::ecs::query::Query;
 
@@ -651,6 +652,7 @@ impl InputComponent {
 }
 
 /// 入力処理システム
+#[derive(Debug)]
 pub struct InputSystem {
     /// 入力状態
     pub state: InputState,
@@ -787,6 +789,51 @@ pub fn init_input_system(world: &mut World) {
     // 入力システムを作成して登録
     let input_system = InputSystem::new();
     world.register_system(input_system);
+}
+
+/// 入力リソース
+/// 入力状態を管理するリソース
+#[derive(Debug)]
+pub struct InputResource {
+    /// 入力状態
+    pub state: InputState,
+    /// 入力システム
+    pub system: InputSystem,
+}
+
+impl Resource for InputResource {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+impl InputResource {
+    /// 新しい入力リソースを作成
+    pub fn new() -> Self {
+        Self {
+            state: InputState::new(),
+            system: InputSystem::new(),
+        }
+    }
+    
+    /// キーボードイベントを処理
+    pub fn handle_keyboard_event(&mut self, event: &KeyboardEvent) {
+        self.system.handle_keyboard_event(event);
+    }
+    
+    /// マウスイベントを処理
+    pub fn handle_mouse_event(&mut self, event: &MouseEvent) {
+        self.system.handle_mouse_event(event);
+    }
+    
+    /// 入力状態を更新
+    pub fn update(&mut self, delta_time: f32) {
+        self.state.update(delta_time);
+    }
 }
 
 #[cfg(test)]

@@ -16,6 +16,7 @@ use wasm_bindgen::JsValue;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
+use std::collections::VecDeque;
 
 /// ネットワークメッセージの圧縮を処理するシステム
 pub struct NetworkCompressionSystem {
@@ -70,6 +71,38 @@ pub enum AdaptiveMode {
     BandwidthPriority,
     /// 品質優先モード（品質を優先し、最小限の圧縮のみ適用）
     QualityPriority,
+}
+
+/// デバッグモードリソース
+#[derive(Debug, Clone)]
+pub struct DebugMode {
+    /// デバッグモードが有効か
+    pub enabled: bool,
+    /// デバッグ情報を表示するか
+    pub show_debug_info: bool,
+    /// 帯域幅使用状況をログ出力するか
+    pub log_bandwidth: bool,
+}
+
+impl Resource for DebugMode {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
+
+impl DebugMode {
+    /// 新しいデバッグモードを作成
+    pub fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            show_debug_info: enabled,
+            log_bandwidth: enabled,
+        }
+    }
 }
 
 impl Default for NetworkCompressionSystem {
@@ -278,12 +311,6 @@ impl System for NetworkCompressionSystem {
     }
 }
 
-/// デバッグモード設定
-pub struct DebugMode {
-    /// 詳細ログ出力
-    pub verbose: bool,
-}
-
 /// ユニットテスト
 #[cfg(test)]
 mod tests {
@@ -324,6 +351,65 @@ mod tests {
             assert_eq!(pos[0], 123.0);
             assert_eq!(pos[1], 457.0);
             assert_eq!(pos[2], 789.0);
+        }
+    }
+}
+
+impl BandwidthUsage {
+    /// 新しい帯域幅監視オブジェクトを作成
+    pub fn new() -> Self {
+        Self {
+            recent_bytes_sent: Vec::new(),
+            recent_bytes_received: Vec::new(),
+            peak_bandwidth: 5000.0, // 初期値: 5KB/秒
+            estimated_available_bandwidth: 10000.0, // 初期値: 10KB/秒
+            target_usage_ratio: 0.8, // 初期値: 帯域幅の80%まで使用
+        }
+    }
+
+    /// 古いデータを削除
+    pub fn cleanup_old_data(&mut self) {
+        let now = Instant::now();
+        let cutoff = now - Duration::from_secs(10);
+        
+        self.recent_bytes_sent.retain(|(time, _)| *time >= cutoff);
+        self.recent_bytes_received.retain(|(time, _)| *time >= cutoff);
+    }
+
+    /// 現在の帯域幅使用量を計算 (bytes/秒)
+    pub fn calculate_current_bandwidth(&self) -> f32 {
+        let now = Instant::now();
+        let window_start = now - Duration::from_secs(1);
+        
+        // 直近1秒間のデータ量を集計
+        let bytes_in_last_second: usize = self.recent_bytes_sent
+            .iter()
+            .filter(|(time, _)| *time >= window_start)
+            .map(|(_, size)| size)
+            .sum();
+            
+        bytes_in_last_second as f32
+    }
+
+    /// 送信バイト数を記録
+    pub fn record_sent(&mut self, bytes: usize) {
+        let now = Instant::now();
+        self.recent_bytes_sent.push((now, bytes));
+        
+        // 定期的にクリーンアップ
+        if self.recent_bytes_sent.len() > 100 {
+            self.cleanup_old_data();
+        }
+    }
+
+    /// 受信バイト数を記録
+    pub fn record_received(&mut self, bytes: usize) {
+        let now = Instant::now();
+        self.recent_bytes_received.push((now, bytes));
+        
+        // 定期的にクリーンアップ
+        if self.recent_bytes_received.len() > 100 {
+            self.cleanup_old_data();
         }
     }
 } 

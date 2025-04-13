@@ -17,6 +17,7 @@ use wasm_bindgen::prelude::*;
 use web_sys::{CanvasRenderingContext2d, HtmlCanvasElement, HtmlImageElement};
 use std::collections::HashMap;
 use std::time::Duration;
+use crate::ecs::Resource;
 
 /// レンダリングシステムを初期化
 pub fn init_rendering_system(world: &mut crate::ecs::World, canvas_id: &str) -> Result<(), JsValue> {
@@ -42,6 +43,17 @@ pub struct Renderer {
     animation_manager: AnimationManager,
     camera: Camera,
     layers: Vec<RenderLayer>,
+}
+
+// Renderer を Resource として実装
+impl Resource for Renderer {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 /// スプライト構造体

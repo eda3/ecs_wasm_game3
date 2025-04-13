@@ -12,6 +12,13 @@ use crate::game::resources::TimeResource;
 /// ゲームの時間を管理し、デルタタイムを計算します。
 pub struct TimeSystem;
 
+impl TimeSystem {
+    /// 新しい時間管理システムを作成します。
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl System for TimeSystem {
     fn name(&self) -> &'static str {
         "TimeSystem"
@@ -32,7 +39,8 @@ impl System for TimeSystem {
             .ok_or_else(|| JsValue::from_str("Time resource not found"))?;
 
         // 時間を更新
-        time.update(delta_time);
+        time.elapsed_time += delta_time * time.time_scale;
+        time.delta_time = delta_time * time.time_scale;
 
         Ok(())
     }
@@ -172,6 +180,13 @@ impl System for SoundSystem {
 /// 
 /// ゲームの状態遷移を管理します。
 pub struct GameStateSystem;
+
+impl GameStateSystem {
+    /// 新しいゲーム状態管理システムを作成します。
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl System for GameStateSystem {
     fn name(&self) -> &'static str {

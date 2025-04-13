@@ -109,22 +109,22 @@ impl World {
     }
 
     /// リソースを追加または更新
-    pub fn insert_resource<T: 'static + Send + Sync>(&mut self, resource: T) {
+    pub fn insert_resource<T: 'static + Send + Sync + resource::Resource>(&mut self, resource: T) {
         self.processor.insert_resource(resource);
     }
 
     /// リソースを取得
-    pub fn get_resource<T: 'static + Send + Sync>(&self) -> Option<&T> {
+    pub fn get_resource<T: 'static + Send + Sync + resource::Resource>(&self) -> Option<&T> {
         self.processor.get_resource()
     }
 
     /// リソースを可変で取得
-    pub fn get_resource_mut<T: 'static + Send + Sync>(&mut self) -> Option<&mut T> {
+    pub fn get_resource_mut<T: 'static + Send + Sync + resource::Resource>(&mut self) -> Option<&mut T> {
         self.processor.get_resource_mut()
     }
 
     /// リソースを削除
-    pub fn remove_resource<T: 'static + Send + Sync>(&mut self) -> Option<T> {
+    pub fn remove_resource<T: 'static + Send + Sync + resource::Resource>(&mut self) -> Option<T> {
         self.processor.remove_resource()
     }
 
