@@ -1,11 +1,9 @@
 use wasm_bindgen::prelude::*;
 use web_sys::console;
-use std::sync::Mutex;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::OnceLock;
-use std::cell::RefCell;
 
 // モジュール宣言
 pub mod ecs;
