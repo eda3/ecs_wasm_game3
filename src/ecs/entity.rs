@@ -45,6 +45,18 @@ impl Entity {
     pub fn generation(&self) -> u32 {
         self.generation
     }
+    
+    /// エンティティIDの内部値を取得
+    /// 
+    /// # 戻り値
+    /// 
+    /// エンティティIDのu64内部値
+    pub fn index(&self) -> u64 {
+        match format!("{}", self.id).strip_prefix("Entity(").and_then(|s| s.strip_suffix(")")) {
+            Some(id_str) => id_str.parse::<u64>().unwrap_or(0),
+            None => 0,
+        }
+    }
 }
 
 /// エンティティの生成と削除を管理する構造体

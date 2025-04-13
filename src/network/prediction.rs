@@ -296,7 +296,7 @@ impl System for ServerReconciliation {
                     // 修正データをキューに追加
                     #[cfg(feature = "debug_network")]
                     web_sys::console::log_1(&format!("ServerReconciliation: クライアント {} のエンティティ {} に修正を送信 (seq: {})",
-                        client_id, entity.id().0, last_sequence).into());
+                        client_id, entity.index() as u32, last_sequence).into());
                     
                     // 修正スナップショットを送信キューに追加
                     send_queue.queue_snapshot(client_id, entity, optimized_snapshot, last_sequence);
@@ -579,7 +579,7 @@ impl ServerReconciliation {
     /// エンティティのスナップショットを作成
     fn create_entity_snapshot(&self, world: &World, entity: Entity, timestamp: f64) -> EntitySnapshot {
         // 新しいスナップショットを作成
-        let mut snapshot = EntitySnapshot::new(entity.id().0, timestamp);
+        let mut snapshot = EntitySnapshot::new(entity.index() as u32, timestamp);
         
         // コンポーネントデータを収集
         let mut components = HashMap::new();
