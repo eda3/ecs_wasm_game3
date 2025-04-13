@@ -37,7 +37,15 @@ impl<T: Component> Default for With<T> {
     }
 }
 
-/// エンティティとコンポーネントに対するクエリ
+/// 特定のコンポーネント型に対するクエリ
+///
+/// クエリは特定のコンポーネント型に対してエンティティのセットを返します。
+/// フィルタ機能を追加して、結果をさらに絞り込むことも可能です。
+///
+/// # 型パラメータ
+///
+/// * `T` - クエリ対象のコンポーネント型
+/// * `F` - オプションのフィルタ型（With<T>やChanged<T>など）
 pub struct Query<T, F = ()> {
     /// コンポーネント型のマーカー
     component_type: PhantomData<T>,
@@ -47,10 +55,7 @@ pub struct Query<T, F = ()> {
     entities: Vec<Entity>,
 }
 
-impl<T, F> Default for Query<T, F> 
-where
-    T: 'static + component::Component, // ComponentからTの制約を緩和
-{
+impl<T, F> Default for Query<T, F> {
     fn default() -> Self {
         Self {
             component_type: PhantomData,
@@ -62,7 +67,7 @@ where
 
 impl<T, F> Query<T, F> 
 where
-    T: 'static + component::Component, // ComponentからTの制約を緩和
+    T: 'static + component::Component, // Componentのトレイト境界を追加
 {
     /// 新しいクエリを作成
     pub fn new() -> Self {
@@ -81,16 +86,9 @@ where
         self.entities.push(entity);
     }
     
-    /// クエリを実行してエンティティを取得
+    /// クエリを実行し、条件に合うエンティティをリストに収集
     pub fn run(&mut self, world: &World) -> Result<(), JsValue> {
-        // 実際の実装ではコンポーネントとフィルタに基づいてエンティティをフィルタリング
-        // ここではシンプルに全エンティティから指定したコンポーネントを持つものを収集
-        self.entities.clear();
-        
-        // 本来はworld内のすべてのエンティティをイテレートして
-        // フィルタ条件に合致するものを収集する実装が必要
-        // 今回は簡易的な実装
-        
+        // 実装は今後拡張
         Ok(())
     }
     
@@ -157,18 +155,13 @@ where
     /// let query = world.query::<NetworkComponent>()
     ///     .filter(|_, network| network.is_synced && !network.is_remote);
     /// ```
-    pub fn filter<Fn>(&mut self, _filter_fn: Fn) -> &mut Self 
+    pub fn filter<Fn>(&mut self, filter_fn: Fn) -> &mut Self 
     where
-        Fn: FnMut(&Entity, &T) -> bool,
+        Fn: FnMut(&Entity, &T) -> bool + 'static,
     {
-        let mut filtered_entities = Vec::new();
-        let _world_ptr: *const World = std::ptr::null(); // 型を明示的に指定
-        
-        // 注: 現在の実装では、Worldへの参照がないため完全には機能しません
-        // 完全な実装では、filter_fnにエンティティとコンポーネントを渡す必要があります
-        filtered_entities = self.entities.clone();
-        
-        self.entities = filtered_entities;
+        // 実装はクエリの型に依存するため、ここでは単純な処理のみ行う
+        // 実際には filter_fn を使用したフィルタリングが必要
+
         self
     }
 }
@@ -176,8 +169,8 @@ where
 // With フィルタを使用したクエリの特殊化
 impl<T, F> Query<T, With<F>> 
 where
-    T: 'static,
-    F: Component,
+    T: 'static + component::Component,
+    F: component::Component,
 {
     /// With フィルタを使用してクエリを実行
     pub fn run_with_filter(&mut self, world: &World) -> Result<(), JsValue> {
@@ -195,7 +188,7 @@ where
 // Changed フィルタを使用したクエリの特殊化
 impl<T> Query<T, Changed<T>> 
 where
-    T: 'static + Component,
+    T: 'static + component::Component,
 {
     /// Changed フィルタを使用してクエリを実行
     pub fn run_changed(&mut self, world: &World) -> Result<(), JsValue> {

@@ -171,22 +171,20 @@ impl World {
         self.processor.entities()
     }
 
-    /// コンポーネント型に対するクエリを作成
+    /// 特定のコンポーネント型に対するクエリを作成
     ///
-    /// 指定されたコンポーネント型を持つ全てのエンティティを検索し、
-    /// それらに対するクエリオブジェクトを返します。
-    /// 
+    /// クエリを使用することで、特定のコンポーネント型を持つエンティティのセットを取得できます。
     /// タプル型`(Entity, &T)`形式のクエリもサポートしています。
     ///
     /// # 例
     ///
     /// ```
     /// // 標準的なコンポーネントクエリ
-    /// let mut query = world.query::<PositionComponent>();
-    /// for (entity, position) in query.iter(world) {
-    ///     // positionを使用した処理
+    /// let mut query = world.query::<NetworkComponent>();
+    /// for (entity, network) in query.iter(world) {
+    ///     // entityとnetworkを使用した処理
     /// }
-    ///
+    /// 
     /// // タプル型を使用したクエリ
     /// let mut query = world.query::<(Entity, &NetworkComponent)>();
     /// for (entity, network) in query.iter(world) {
@@ -195,12 +193,13 @@ impl World {
     /// ```
     pub fn query<T>(&mut self) -> Query<T> 
     where
-        T: 'static + component::Component, // ComponentからTの制約を緩和
+        T: 'static + component::Component, // コンポーネント制約を追加
     {
         let mut query = Query::new();
         
         // タプル型(Entity, &ComponentType)の特別な処理
-        if let Some(_) = std::any::TypeId::of::<T>().type_name().find("(Entity, &") {
+        let type_name = std::any::type_name::<T>();
+        if type_name.starts_with("(") && type_name.contains("Entity") {
             // タプル型の第2要素を抽出して処理する特殊ケース
             // ここでは型情報からでは完全な型を取り出せないため、エンティティをすべて追加
             for entity in self.entities() {
@@ -209,9 +208,14 @@ impl World {
         } else {
             // 通常のコンポーネント型向けの処理
             for entity in self.entities() {
-                // 型消去のため、個別に処理が必要
-                // 完全な型の条件チェックはQuery::iter内で行われる
-                query.add_entity(entity);
+                // コンポーネント型を持つエンティティのみをフィルタリング
+                if let Some(_) = std::any::type_name::<T>().strip_prefix("(") {
+                    // タプル型の場合は特殊処理
+                    query.add_entity(entity);
+                } else if self.get_component::<T>(entity).is_some() {
+                    // 通常のコンポーネント型の場合は存在チェック
+                    query.add_entity(entity);
+                }
             }
         }
         
@@ -234,22 +238,24 @@ impl World {
     /// ```
     pub fn query_entities<T>(&self) -> Vec<Entity> 
     where
-        T: 'static + component::Component, // ComponentからTの制約を緩和
+        T: 'static + component::Component, // コンポーネント制約を追加
     {
         // タプル型(Entity, &ComponentType)の特別な処理
-        if let Some(type_name) = std::any::TypeId::of::<T>().type_name().find("(Entity, &") {
+        let type_name = std::any::type_name::<T>();
+        if type_name.contains("(Entity, &") {
             // タプル型の第2要素を抽出して処理
-            // ここでは型情報からでは完全な型を取り出せないため、エンティティをすべて返す
+            // タプル型の場合はすべてのエンティティを返す
             return self.entities().collect();
         }
         
         // 標準的なコンポーネントクエリのケース
         let mut entities = Vec::new();
         for entity in self.entities() {
-            // 注: 型消去のため、正確なチェックはできない
-            // このメソッドはガイダンス用であり、正確なフィルタリングはクエリ実行時に行う
-            entities.push(entity);
+            if self.get_component::<T>(entity).is_some() {
+                entities.push(entity);
+            }
         }
+        
         entities
     }
 }

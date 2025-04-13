@@ -1115,7 +1115,7 @@ impl System for InputLatencyCompensationSystem {
                     let compensation_factor = (monitor.packet_loss * 10.0).min(0.2); // Cap at 20% compensation
                     
                     // Find entities with network component
-                    for (entity, _) in world.query_entities::<NetworkComponent>() {
+                    for entity in world.query_entities::<NetworkComponent>() {
                         // Apply input lag compensation here (simplified)
                         // In a real implementation, you'd adjust input processing timing
                         // based on the network conditions
