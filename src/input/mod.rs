@@ -721,7 +721,19 @@ impl InputSystem {
 }
 
 impl System for InputSystem {
-    fn run(&mut self, world: &mut World, delta_time: f32) -> Result<(), JsValue> {
+    fn name(&self) -> &'static str {
+        "InputSystem"
+    }
+    
+    fn phase(&self) -> SystemPhase {
+        SystemPhase::Input
+    }
+    
+    fn priority(&self) -> SystemPriority {
+        SystemPriority::new(0) // 入力処理は優先度0（最優先）
+    }
+
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // 入力状態を更新
         self.state.update(delta_time);
         
