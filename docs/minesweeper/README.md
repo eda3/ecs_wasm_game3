@@ -18,12 +18,14 @@
 - **フレームワーク**: 既存のECSシステムを活用
 
 ## ドキュメント構成
-- [技術仕様書](./technical_specification.md)
+- [技術仕様書](./technical_spec.md)
 - [ゲームルール](./game_rules.md)
-- [UI設計](./ui_design.md)
+- [UI設計](./ui_ux_design.md)
 - [サーバーアーキテクチャ](./server_architecture.md)
 - [クライアントアーキテクチャ](./client_architecture.md)
 - [実装計画](./implementation_plan.md)
+
+**注意**: `technical_specification.md`は古いバージョンであり、最新の技術仕様書は`technical_spec.md`を参照してください。
 
 ## プロジェクトの目標
 - シンプルで直感的なUI/UX

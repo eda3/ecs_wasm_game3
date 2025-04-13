@@ -561,13 +561,15 @@ impl GameRoom {
         // 得点計算
         if !revealed.is_empty() {
             let player_index = self.players.iter().position(|p| p.id == player_id).unwrap();
+            
+            // 通常のセル開封（1ポイント/セル）
             let score_increase = revealed.len() as u32;
             self.players[player_index].score += score_increase;
             
             // 地雷を踏んだ場合
             if let Some(cell) = self.board.get_cell(&pos) {
                 if cell.is_mine && cell.is_revealed {
-                    // 競争モードでは地雷を踏むとスコアが減少
+                    // 競争モードでは地雷を踏むとスコアが減少（最低0）
                     if matches!(self.game_mode, GameMode::Competitive) {
                         let penalty = std::cmp::min(self.players[player_index].score, 10);
                         self.players[player_index].score -= penalty;

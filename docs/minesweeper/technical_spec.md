@@ -134,15 +134,25 @@ struct GameBoard {
     height: u8,
     cells: Vec<Cell>,
     mine_count: u32,
+    revealed_count: u32,
+    flagged_count: u32,
+    first_move_made: bool,
 }
 
 struct Cell {
-    position: (u8, u8),
+    position: Position,
     is_mine: bool,
     is_revealed: bool,
     is_flagged: bool,
     adjacent_mines: u8,
     revealed_by: Option<PlayerId>,
+    flagged_by: Option<PlayerId>,
+    reveal_time: Option<Instant>,
+}
+
+struct Position {
+    x: u8,
+    y: u8,
 }
 ```
 
@@ -151,11 +161,12 @@ struct Cell {
 struct Player {
     id: PlayerId,
     username: String,
-    color: RgbaColor,
+    color: [u8; 4], // RGBA
     score: u32,
     is_host: bool,
     is_ready: bool,
     connection_state: ConnectionState,
+    last_activity: Instant,
 }
 
 enum ConnectionState {
@@ -177,6 +188,8 @@ struct GameRoom {
     state: GameState,
     created_at: Instant,
     last_activity: Instant,
+    max_players: u8,
+    chat_history: Vec<ChatMessage>,
 }
 
 enum GameMode {
@@ -356,4 +369,64 @@ cargo build --release
 
 ### ユーザーテスト
 - UIユーザビリティテスト
-- ゲームプレイフィードバック収集 
+- ゲームプレイフィードバック収集
+
+## ゲームルーム管理
+
+### プレイヤー要件
+- 最小プレイヤー数: 2人（ゲーム開始に必要な人数）
+- 最大プレイヤー数: 8人（ルームあたりの上限）
+- 全プレイヤーが準備完了状態になるまでゲームを開始できない
+- ホストのみがゲーム開始権限を持つ
+
+### ルーム参加フロー
+1. プレイヤーはルームコード（5文字）を使用して既存のルームに参加、または新しいルームを作成
+2. 参加時にユーザー名を入力
+3. ルームに参加するとロビー画面に遷移
+4. プレイヤーは「準備完了」ボタンでゲーム開始の準備を示す
+5. 全員が準備完了になるとホストがゲームを開始可能
+
+### UIフローと状態遷移
+```
+スタート画面 → ゲームモード選択 → 難易度選択 → ルーム作成/参加 → ロビー → ゲームプレイ → ゲーム終了画面
+```
+
+#### 各画面の主な状態変化
+- **スタート画面**: 
+  - 新規ゲーム開始: ゲームモード選択画面へ
+  - ゲーム参加: ルーム参加画面へ
+  
+- **ロビー画面**: 
+  - プレイヤー参加/退出の表示
+  - チャットメッセージの表示
+  - 準備状態の切り替え
+  - ゲーム開始（全員準備完了時にホストが実行）
+  
+- **ゲームプレイ画面**:
+  - リアルタイムのボード状態更新
+  - プレイヤーアクション（セル開封、旗設置）
+  - スコア更新
+  - ゲーム終了条件達成
+  
+- **ゲーム終了画面**:
+  - 最終スコア表示
+  - 勝者表示（競争モード）
+  - 統計情報表示
+  - リプレイまたはメインメニュー選択
+
+## クライアント機能要件
+
+### 基本機能
+- ルーム作成・参加
+- セル操作（開封、旗設置）
+- チャット機能
+- スコア表示
+- ゲーム状態表示
+
+### 操作方法
+- 左クリック/タップ: セルを開く
+- 右クリック/長押し: 旗を立てる/外す
+- 中クリック/ダブルタップ: 周囲の開封（隣接する数字のセルで、周囲に正確な数の旗がある場合）
+
+### クエスチョンマーク機能
+**注意**: 現在の実装ではクエスチョンマーク機能はオプションとして計画されていますが、まだ実装されていません。将来のアップデートで追加される予定です。 
