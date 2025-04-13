@@ -195,7 +195,7 @@ impl World {
     /// ```
     pub fn query<T>(&mut self) -> Query<T> 
     where
-        T: 'static, // ComponentからTの制約を緩和
+        T: 'static + component::Component, // ComponentからTの制約を緩和
     {
         let mut query = Query::new();
         
@@ -234,7 +234,7 @@ impl World {
     /// ```
     pub fn query_entities<T>(&self) -> Vec<Entity> 
     where
-        T: 'static, // ComponentからTの制約を緩和
+        T: 'static + component::Component, // ComponentからTの制約を緩和
     {
         // タプル型(Entity, &ComponentType)の特別な処理
         if let Some(type_name) = std::any::TypeId::of::<T>().type_name().find("(Entity, &") {

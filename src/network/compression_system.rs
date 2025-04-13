@@ -108,7 +108,7 @@ impl DebugMode {
 impl Default for NetworkCompressionSystem {
     fn default() -> Self {
         // デフォルトの圧縮設定：位置=2桁、回転=2桁、速度=1桁
-        let default_compressor = DefaultMessageCompressor::new(2, 2, 1);
+        let default_compressor = DefaultMessageCompressor::new();
         
         Self {
             compressor: Box::new(default_compressor),
@@ -389,7 +389,7 @@ impl System for NetworkCompressionSystem {
         
         // 性能ログ出力（デバッグ用）
         if let Some(mode) = resources.get::<DebugMode>() {
-            if mode.verbose {
+            if mode.show_debug_info {
                 println!("NetworkCompressionSystem: 現在のモード={:?}, 帯域={:.1}KB/s", 
                     self.adaptive_mode,
                     self.bandwidth_usage.calculate_current_bandwidth() / 1000.0);
