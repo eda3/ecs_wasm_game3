@@ -372,23 +372,16 @@ impl System for SyncSystem {
         
         // エンティティの同期状態を更新
         for entity in entities_to_sync {
-            let state = self.entity_states
-                .entry(entity)
-                .or_insert_with(|| EntitySyncState {
-                    last_sync_time: 0.0,
-                    last_component_hashes: HashMap::new(),
-                    synced_this_frame: false,
-                });
-                
-            // スナップショットを作成
+            // 先にスナップショットを作成して、すべての必要な情報を収集
             let snapshot = self.create_entity_snapshot(world, entity, now);
             
-            // 変更されたコンポーネントを検出
+            // 変更されたコンポーネントとハッシュを事前に計算
+            let mut component_hashes = HashMap::new();
             let mut changed_components = HashMap::new();
             
             for component in &snapshot.components {
                 let hash = self.compute_component_hash(component);
-                // コンポーネント名を取得（実際の実装ではコンポーネントから名前を取得する必要がある）
+                // コンポーネント名を取得
                 let name = format!("Component_{}", match component {
                     ComponentData::Position { .. } => "Position",
                     ComponentData::Velocity { .. } => "Velocity",
@@ -398,6 +391,32 @@ impl System for SyncSystem {
                     ComponentData::PlayerInfo { .. } => "PlayerInfo",
                     ComponentData::Custom { .. } => "Custom",
                 });
+                component_hashes.insert(name.clone(), hash);
+            }
+            
+            // ここで entity_states を可変借用
+            let state = self.entity_states
+                .entry(entity)
+                .or_insert_with(|| EntitySyncState {
+                    last_sync_time: 0.0,
+                    last_component_hashes: HashMap::new(),
+                    synced_this_frame: false,
+                });
+            
+            // 変更されたコンポーネントを検出
+            for component in &snapshot.components {
+                // コンポーネント名を再度取得（これは冗長だが、所有権問題を回避するため）
+                let name = format!("Component_{}", match component {
+                    ComponentData::Position { .. } => "Position",
+                    ComponentData::Velocity { .. } => "Velocity",
+                    ComponentData::Rotation { .. } => "Rotation",
+                    ComponentData::Health { .. } => "Health",
+                    ComponentData::Sprite { .. } => "Sprite",
+                    ComponentData::PlayerInfo { .. } => "PlayerInfo",
+                    ComponentData::Custom { .. } => "Custom",
+                });
+                
+                let hash = *component_hashes.get(&name).unwrap();
                 let last_hash = state.last_component_hashes.get(&name).cloned().unwrap_or(0);
                 
                 // ハッシュが変わっていれば変更されたとみなす
@@ -416,12 +435,13 @@ impl System for SyncSystem {
                     delta_snapshot.components.push(component);
                 }
                 
-                // スナップショットを送信
-                let bytes_sent = self.send_entity_sync(delta_snapshot);
-                
-                // 同期状態を更新
+                // entity_states の借用を終了してからスナップショットを送信
+                // self.send_entity_sync を呼び出す前に state の可変借用を終了
                 state.last_sync_time = now;
                 state.synced_this_frame = true;
+                
+                // スナップショットを送信
+                let bytes_sent = self.send_entity_sync(delta_snapshot);
                 
                 if self.config.debug_mode {
                     web_sys::console::log_1(&format!("エンティティ {:?} を同期: {}バイト", entity, bytes_sent).into());
