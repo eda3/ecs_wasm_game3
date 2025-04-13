@@ -170,6 +170,51 @@ impl World {
     pub fn entities(&self) -> impl Iterator<Item = Entity> + '_ {
         self.processor.entities()
     }
+
+    /// コンポーネント型に対するクエリを作成
+    ///
+    /// 指定されたコンポーネント型を持つ全てのエンティティを検索し、
+    /// それらに対するクエリオブジェクトを返します。
+    ///
+    /// # 例
+    ///
+    /// ```
+    /// let mut query = world.query::<PositionComponent>();
+    /// for (entity, position) in query.iter(world) {
+    ///     // positionを使用した処理
+    /// }
+    /// ```
+    pub fn query<T: Component>(&mut self) -> Query<T> {
+        let mut query = Query::new();
+        for entity in self.entities() {
+            if self.get_component::<T>(entity).is_some() {
+                query.add_entity(entity);
+            }
+        }
+        query
+    }
+
+    /// 特定のコンポーネントを持つすべてのエンティティを取得
+    ///
+    /// 指定されたコンポーネント型を持つエンティティのIDリストを返します。
+    ///
+    /// # 例
+    ///
+    /// ```
+    /// let entities = world.query_entities::<NetworkComponent>();
+    /// for entity in entities {
+    ///     // entityを使用した処理
+    /// }
+    /// ```
+    pub fn query_entities<T: Component>(&self) -> Vec<Entity> {
+        let mut entities = Vec::new();
+        for entity in self.entities() {
+            if self.get_component::<T>(entity).is_some() {
+                entities.push(entity);
+            }
+        }
+        entities
+    }
 }
 
 // ECSの初期化関数

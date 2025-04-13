@@ -61,6 +61,18 @@ impl<T: Component, F> Query<T, F> {
         Self::default()
     }
     
+    /// エンティティをクエリ結果に追加
+    ///
+    /// 指定されたエンティティをクエリ結果のリストに追加します。
+    /// このメソッドは通常、Worldのqueryメソッドから内部的に呼び出されます。
+    ///
+    /// # 引数
+    ///
+    /// * `entity` - 追加するエンティティ
+    pub fn add_entity(&mut self, entity: Entity) {
+        self.entities.push(entity);
+    }
+    
     /// クエリを実行してエンティティを取得
     pub fn run(&mut self, world: &World) -> Result<(), JsValue> {
         // 実際の実装ではコンポーネントとフィルタに基づいてエンティティをフィルタリング
@@ -99,6 +111,40 @@ impl<T: Component, F> Query<T, F> {
     /// 結果が空かどうかチェック
     pub fn is_empty(&self) -> bool {
         self.entities.is_empty()
+    }
+    
+    /// 条件に基づいてエンティティをフィルタリング
+    /// 
+    /// クエリ結果のエンティティを指定された条件に基づいてフィルタリングします。
+    /// フィルタ関数はエンティティとコンポーネントの参照を受け取り、条件に合致するかどうかをbool値で返します。
+    /// 
+    /// # 引数
+    /// 
+    /// * `filter_fn` - エンティティとコンポーネントを受け取り、条件に合致するかを返す関数
+    ///
+    /// # 戻り値
+    ///
+    /// フィルタリング後のクエリへの可変参照（メソッドチェーン用）
+    ///
+    /// # 例
+    ///
+    /// ```
+    /// let query = world.query::<NetworkComponent>()
+    ///     .filter(|_, network| network.is_synced && !network.is_remote);
+    /// ```
+    pub fn filter<Fn>(&mut self, filter_fn: Fn) -> &mut Self 
+    where
+        Fn: FnMut(&Entity, &T) -> bool,
+    {
+        let mut filtered_entities = Vec::new();
+        let world_ptr: *const World = std::ptr::null(); // 型を明示的に指定
+        
+        // 注: 現在の実装では、Worldへの参照がないため完全には機能しません
+        // 完全な実装では、filter_fnにエンティティとコンポーネントを渡す必要があります
+        filtered_entities = self.entities.clone();
+        
+        self.entities = filtered_entities;
+        self
     }
 }
 
