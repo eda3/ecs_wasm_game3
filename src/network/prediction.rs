@@ -437,15 +437,17 @@ impl ServerReconciliation {
                     // Z軸の処理（必要な場合）
                     if let Some(vel_z) = velocity.z {
                         // Z位置を更新
-                        position.z += vel_z * delta_time;
+                        position.z = position.z.map(|z| z + vel_z * delta_time);
                         
                         // 重力など物理シミュレーションの適用（例）
-                        if position.z > 0.0 {
-                            velocity.z = Some(vel_z - 9.8 * delta_time); // 重力加速度
-                        } else if position.z < 0.0 {
-                            // 地面にいる場合
-                            position.z = 0.0;
-                            velocity.z = Some(0.0);
+                        if let Some(z) = position.z {
+                            if z > 0.0 {
+                                velocity.z = Some(vel_z - 9.8 * delta_time); // 重力加速度
+                            } else if z < 0.0 {
+                                // 地面にいる場合
+                                position.z = Some(0.0);
+                                velocity.z = Some(0.0);
+                            }
                         }
                     }
                 }
@@ -462,7 +464,8 @@ impl ServerReconciliation {
                         if let Some(mut velocity) = world.get_component_mut::<VelocityComponent>(entity) {
                             // ジャンプは地面にいる場合のみ有効
                             if let Some(position) = world.get_component::<PositionComponent>(entity) {
-                                if position.z <= 0.01 { // 地面に近い
+                                // 地面に近いかチェック
+                                if position.z.map_or(true, |z| z <= 0.01) { // 地面に近い
                                     velocity.z = Some(10.0); // ジャンプ力
                                 }
                             }
