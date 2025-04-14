@@ -130,10 +130,16 @@ impl NetworkClient {
         // 自己参照のクロージャを回避するために弱参照を作成
         let message_queue = Rc::new(RefCell::new(self.message_queue.clone()));
         let message_queue_weak = Rc::downgrade(&message_queue);
+        let connection_state = Rc::new(RefCell::new(self.connection_state.clone()));
 
         // WebSocketが開いたときのコールバック
+        let connection_state_clone = connection_state.clone();
         let onopen_callback = Closure::wrap(Box::new(move |_event: Event| {
             log::info!("🌐 WebSocket接続完了！");
+            // 接続状態を更新
+            if let Ok(mut state) = connection_state_clone.try_borrow_mut() {
+                *state = ConnectionState::Connected;
+            }
         }) as Box<dyn FnMut(Event)>);
 
         // メッセージを受信したときのコールバック
@@ -180,7 +186,6 @@ impl NetworkClient {
 
         // 接続の保存
         self.connection = Some(ws);
-        self.connection_state = ConnectionState::Connected;
         self.connected_at = Some(js_sys::Date::now() as f64);
 
         log::info!("🔄 サーバーに接続中: {}", url);
@@ -222,29 +227,61 @@ impl NetworkClient {
         Ok(())
     }
 
-    /// メッセージを送信
-    pub fn send_message(&mut self, message: NetworkMessage) -> Result<(), NetworkError> {
-        if self.connection_state != ConnectionState::Connected {
-            self.pending_messages.push_back(message);
-            return Ok(());
-        }
+    /// メッセージをサーバーに送信します。
+    /// 接続が確立されていない場合は、メッセージを保留キューに追加します。
+    pub fn send_message(&mut self, mut message: NetworkMessage) -> Result<(), NetworkError> {
+        // シーケンス番号とタイムスタンプを先に設定
+        let next_seq = self.next_sequence_number();
+        message.sequence = Some(next_seq);
+        message.timestamp = js_sys::Date::now() as f64;
 
         if let Some(ws) = &self.connection {
-            if let Ok(json) = message.to_json() {
-                if let Err(err) = ws.send_with_str(&json) {
-                    let error_msg = format!("メッセージ送信エラー: {:?}", err);
-                    self.pending_messages.push_back(message);
-                    return Err(NetworkError::MessageProcessingError(error_msg));
+            // WebSocketの状態を確認
+            match ws.ready_state() {
+                WebSocket::OPEN => {
+                    // メッセージをJSONに変換
+                    let json_message = match message.to_json() {
+                        Ok(json) => json,
+                        Err(e) => {
+                            log::error!("メッセージのシリアライズに失敗: {:?}", e);
+                            return Err(NetworkError::MessageProcessingError("メッセージのシリアライズに失敗".to_string()));
+                        }
+                    };
+
+                    // メッセージを送信
+                    match ws.send_with_str(&json_message) {
+                        Ok(_) => {
+                            log::debug!("📤 メッセージ送信: {:?}", message);
+                            Ok(())
+                        }
+                        Err(err) => {
+                            log::error!("メッセージ送信エラー: {:?}", err);
+                            // エラーが発生した場合も一旦保留キューに入れる (再接続後に送信試行)
+                            self.pending_messages.push_back(message);
+                            Err(NetworkError::MessageProcessingError(format!("メッセージ送信エラー: {:?}", err)))
+                        }
+                    }
                 }
-            } else {
-                let error_msg = "メッセージのJSON変換に失敗".to_string();
-                return Err(NetworkError::MessageProcessingError(error_msg));
+                WebSocket::CONNECTING => {
+                    // 接続中の場合は保留キューへ
+                    log::warn!("接続中のためメッセージを保留: {:?}", message);
+                    self.pending_messages.push_back(message);
+                    Ok(())
+                }
+                _ => {
+                    // その他の状態（CLOSING, CLOSED）の場合はエラーまたは保留
+                    log::error!("接続が確立されていないためメッセージを送信できません (状態: {})。メッセージを保留します。", ws.ready_state());
+                    self.pending_messages.push_back(message);
+                    // Err(NetworkError::ConnectionError("接続が確立されていません".to_string()))
+                    Ok(()) // エラーではなく保留にする
+                }
             }
         } else {
+            // 接続オブジェクト自体がない場合は保留キューへ
+            log::warn!("接続がないためメッセージを保留: {:?}", message);
             self.pending_messages.push_back(message);
+            Ok(())
         }
-        
-        Ok(())
     }
 
     /// 入力データを送信
@@ -437,14 +474,22 @@ impl NetworkClient {
 
     /// 保留中のメッセージを送信
     fn send_pending_messages(&mut self) {
+        // 接続状態の確認 - 接続済みの場合のみ処理
         if self.connection_state != ConnectionState::Connected {
             return;
         }
         
-        while let Some(message) = self.pending_messages.pop_front() {
-            if let Err(err) = self.send_message(message) {
-                web_sys::console::error_1(&format!("保留メッセージの送信エラー: {:?}", err).into());
-                break;
+        // WebSocketの状態を確認 - OPEN状態の場合のみ処理
+        if let Some(ws) = &self.connection {
+            if ws.ready_state() != WebSocket::OPEN {
+                return;
+            }
+            
+            while let Some(message) = self.pending_messages.pop_front() {
+                if let Err(err) = self.send_message(message) {
+                    web_sys::console::error_1(&format!("保留メッセージの送信エラー: {:?}", err).into());
+                    break;
+                }
             }
         }
     }

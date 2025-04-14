@@ -113,70 +113,42 @@ impl GameInstance {
     // サーバーに接続
     #[wasm_bindgen]
     pub fn connect_to_server(&mut self, server_url: &str) -> Result<(), JsValue> {
-        log::info!("サーバーに接続中: {}", server_url);
+        log::info!("🌐 サーバーに接続開始: {}", server_url);
         
-        // 既存の接続があれば削除
-        if let Some(client_id) = &self.network_client_id {
-            NETWORK_CLIENTS.with(|clients| {
-                clients.borrow_mut().remove(client_id);
-            });
-        }
+        // 既存の接続を削除
+        self.clear_existing_connection();
         
         // 新しいクライアントIDを生成
         let client_id = format!("client_{}", js_sys::Date::now());
-        
-        // ネットワーク設定の作成
-        let network_config = network::NetworkConfig {
-            server_url: server_url.to_string(),
-            ..Default::default()
-        };
-        
-        // ネットワーククライアントを作成して保存
-        let client = network::client::NetworkClient::new(network_config);
-        let client_rc = Rc::new(RefCell::new(client));
-        
-        // クライアントIDを設定
-        self.network_client_id = Some(client_id.clone());
-        
-        // グローバルマップに保存
-        NETWORK_CLIENTS.with(|clients| {
-            clients.borrow_mut().insert(client_id.clone(), client_rc.clone());
-        });
         
         // ネットワークリソースをワールドに追加
         let network_resource = network::NetworkResource::new(server_url.to_string());
         self.world.insert_resource(network_resource);
         
-        // 別のスコープでクライアントに接続処理を実行
-        let connect_result = NETWORK_CLIENTS.with(|clients| {
-            if let Some(client_ref) = clients.borrow().get(&client_id) {
-                let mut client = client_ref.borrow_mut();
-                // 新しいconnectメソッドを使用（URLを渡す）
-                match client.connect(server_url) {
-                    Ok(_) => {
-                        log::info!("🎉 サーバー接続成功！");
-                        Ok(())
-                    },
-                    Err(err) => {
-                        let error_msg = format!("サーバー接続中にエラーが発生しました: {:?}", err);
-                        log::error!("😭 {}", error_msg);
-                        Err(JsValue::from_str(&error_msg))
-                    }
-                }
-            } else {
-                Err(JsValue::from_str("クライアント接続に失敗しました"))
-            }
-        });
+        // 設定を作成
+        let config = network::NetworkConfig {
+            server_url: server_url.to_string(),
+            ..Default::default()
+        };
         
-        // エラーが発生した場合はクライアントを削除
-        if connect_result.is_err() {
+        // クライアントを作成して接続
+        let result = create_and_connect_client(client_id.clone(), config, server_url);
+        
+        // 成功した場合はIDを保存
+        if result.is_ok() {
+            self.network_client_id = Some(client_id);
+        }
+        
+        result
+    }
+    
+    // 既存の接続をクリア
+    fn clear_existing_connection(&mut self) {
+        if let Some(client_id) = self.network_client_id.take() {
             NETWORK_CLIENTS.with(|clients| {
                 clients.borrow_mut().remove(&client_id);
             });
-            self.network_client_id = None;
         }
-        
-        connect_result
     }
     
     // サーバーから切断
@@ -288,45 +260,35 @@ impl GameInstance {
     
     /// キーイベントを処理
     pub fn handle_key_event(&mut self, key_code: u32) -> Result<(), JsValue> {
-        // InputSystem取得方法の修正
         if let Some(input_resource) = self.world.get_resource_mut::<input::InputResource>() {
-            // 適切なInputResource経由でキーイベントを処理
+            // InputResource経由でキーイベントを処理
             let event = input::KeyboardEvent {
                 key: key_code.to_string(),
-                event_type: "keydown".to_string(),
+                event_type: "keydown".to_string(), // pressedに応じて変える必要あり
             };
             input_resource.handle_keyboard_event(&event);
-            return Ok(())
+            Ok(())
+        } else {
+            log::warn!("InputResource not found, key event ignored");
+            Ok(())
         }
-        
-        // InputSystemが見つからない場合のエラー処理
-        log::warn!("InputSystem not found, key event ignored");
-        Ok(())
     }
     
     // マウス入力を処理
     #[wasm_bindgen]
     pub fn handle_mouse_event(&mut self, event_type: &str, x: f32, y: f32, button: Option<i32>) {
-        // 入力システムにイベントを送信
         let event = input::MouseEvent {
             event_type: event_type.to_string(),
             position: (x, y),
             button,
         };
         
-        // 入力システムを取得して処理を委譲
-        if let Some(input_system) = self.get_input_system() {
-            input_system.handle_mouse_event(&event);
+        // InputResourceを取得して処理を委譲
+        if let Some(input_resource) = self.world.get_resource_mut::<input::InputResource>() {
+            input_resource.handle_mouse_event(&event);
         } else {
-            log::warn!("入力システムが見つかりません");
+            log::warn!("InputResource not found, mouse event ignored");
         }
-    }
-    
-    // 入力システムを取得
-    fn get_input_system(&mut self) -> Option<&mut input::InputSystem> {
-        // InputResourceからInputSystemを取得する
-        self.world.get_resource_mut::<input::InputResource>()
-            .map(|input_resource| &mut input_resource.system)
     }
     
     // 解放時の処理
@@ -352,6 +314,36 @@ impl GameInstance {
                 
                 clients.borrow_mut().remove(&client_id);
             });
+        }
+    }
+}
+
+// グローバル関数としてクライアントを作成・接続
+fn create_and_connect_client(
+    client_id: String,
+    config: network::NetworkConfig,
+    server_url: &str
+) -> Result<(), JsValue> {
+    // クライアントを作成
+    let mut client = network::client::NetworkClient::new(config);
+    
+    // 接続を試行
+    match client.connect(server_url) {
+        Ok(_) => {
+            log::info!("✅ サーバー接続成功！");
+            
+            // 成功したらグローバルマップに保存
+            let client_rc = Rc::new(RefCell::new(client));
+            NETWORK_CLIENTS.with(|clients| {
+                clients.borrow_mut().insert(client_id, client_rc);
+            });
+            
+            Ok(())
+        },
+        Err(err) => {
+            let error_msg = format!("❌ サーバー接続失敗: {:?}", err);
+            log::error!("{}", error_msg);
+            Err(JsValue::from_str(&error_msg))
         }
     }
 }

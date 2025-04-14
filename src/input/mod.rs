@@ -5,9 +5,10 @@
 //! 複雑な入力処理（キーリピート、ジェスチャー検出など）も提供します。
 
 use std::collections::{HashMap, HashSet};
-use std::time::{Duration, Instant};
 use wasm_bindgen::prelude::*;
 use web_sys::KeyboardEvent as WebKeyboardEvent;
+use web_sys::console;
+use js_sys::Date;
 use wasm_bindgen::JsValue;
 
 use crate::ecs::{Entity, System, World, SystemPhase, SystemPriority, ResourceManager, Resource};
@@ -39,7 +40,7 @@ pub struct MouseEvent {
     pub button: Option<i32>,
 }
 
-/// キーボードのキーコード用の型エイリアス
+/// キーコード用の型エイリアス
 pub type KeyCode = u32;
 
 /// マウスボタン用の型エイリアス
@@ -58,12 +59,12 @@ pub struct InputState {
     pub keys_pressed: HashSet<KeyCode>,
     /// 前回のフレームでのキーの状態
     pub keys_previous: HashSet<KeyCode>,
-    /// キーが押されてからの経過時間
-    pub key_press_duration: HashMap<KeyCode, Duration>,
-    /// 最後にキーが押された時間
-    pub key_last_press_time: HashMap<KeyCode, Instant>,
-    /// 最後にキーがリピートされた時間
-    pub key_last_repeat_time: HashMap<KeyCode, Instant>,
+    /// キーが押されてからの経過時間（ミリ秒）
+    pub key_press_duration: HashMap<KeyCode, f64>,
+    /// 最後にキーが押された時間（エポックからのミリ秒）
+    pub key_last_press_time: HashMap<KeyCode, f64>,
+    /// 最後にキーがリピートされた時間（エポックからのミリ秒）
+    pub key_last_repeat_time: HashMap<KeyCode, f64>,
     
     /// マウスの現在位置
     pub mouse_position: (f32, f32),
@@ -104,8 +105,8 @@ pub struct TouchPoint {
     pub force: f32,
     /// タッチがアクティブかどうか
     pub is_active: bool,
-    /// タッチが開始された時間
-    pub start_time: Instant,
+    /// タッチが開始された時間（エポックからのミリ秒）
+    pub start_time: f64,
 }
 
 /// ジェスチャータイプの列挙型
@@ -152,7 +153,7 @@ pub struct GestureDetector {
     /// スワイプの最小距離（ピクセル）
     pub min_swipe_distance: f32,
     /// 最後のタップの時間
-    pub last_tap_time: Option<Instant>,
+    pub last_tap_time: Option<f64>,
     /// 最後のタップの位置
     pub last_tap_position: Option<(f32, f32)>,
 }
@@ -175,21 +176,21 @@ impl GestureDetector {
     pub fn detect_gestures(&mut self, touch_points: &HashMap<TouchId, TouchPoint>, touch_points_previous: &HashMap<TouchId, TouchPoint>) {
         self.detected_gestures.clear();
         
-        let now = Instant::now();
+        let now = Date::now();
         
         // タップとロングプレスの検出
         for (id, point) in touch_points.iter() {
             if !point.is_active && touch_points_previous.get(id).map_or(false, |p| p.is_active) {
                 // タッチが終了した
-                let duration = now.duration_since(point.start_time);
+                let duration = now - point.start_time;
                 
-                if duration.as_millis() <= self.tap_duration_ms as u128 {
+                if duration <= self.tap_duration_ms as f64 {
                     // タップ検出
                     self.detected_gestures.push((GestureType::Tap, 1.0));
                     
                     // ダブルタップ検出
                     if let Some(last_time) = self.last_tap_time {
-                        if now.duration_since(last_time).as_millis() <= self.double_tap_interval_ms as u128 {
+                        if now - last_time <= self.double_tap_interval_ms as f64 {
                             if let Some(last_pos) = self.last_tap_position {
                                 let dx = point.position.0 - last_pos.0;
                                 let dy = point.position.1 - last_pos.1;
@@ -204,7 +205,7 @@ impl GestureDetector {
                     
                     self.last_tap_time = Some(now);
                     self.last_tap_position = Some(point.position);
-                } else if duration.as_millis() >= self.long_press_duration_ms as u128 {
+                } else if duration >= self.long_press_duration_ms as f64 {
                     // 長押し検出
                     self.detected_gestures.push((GestureType::LongPress, 1.0));
                 }
@@ -319,8 +320,8 @@ pub struct ActionMapping {
     pub active_actions: HashSet<ActionName>,
     /// 前回のフレームでのアクティブなアクション
     pub previous_actions: HashSet<ActionName>,
-    /// アクションが開始された時間
-    pub action_start_time: HashMap<ActionName, Instant>,
+    /// アクションが開始された時間（エポックからのミリ秒）
+    pub action_start_time: HashMap<ActionName, f64>,
     /// アクションの入力値（アナログ値、0.0～1.0）
     pub action_values: HashMap<ActionName, f32>,
 }
@@ -396,9 +397,19 @@ impl ActionMapping {
         *self.action_values.get(action).unwrap_or(&0.0)
     }
     
-    /// アクションの継続時間を取得
-    pub fn get_action_duration(&self, action: &str) -> Option<Duration> {
-        self.action_start_time.get(action).map(|start| start.elapsed())
+    /// アクションの持続時間を取得（ミリ秒）
+    pub fn get_action_duration(&self, action: &str) -> Option<f64> {
+        if let Some(start_time) = self.action_start_time.get(action) {
+            if self.active_actions.contains(action) {
+                // アクションがアクティブならば、現在時刻との差分を返す
+                let now = Date::now();
+                Some(now - start_time)
+            } else {
+                None // アクションが非アクティブならば持続時間なし
+            }
+        } else {
+            None // 開始時間がなければ持続時間なし
+        }
     }
 }
 
@@ -429,7 +440,7 @@ impl InputState {
     
     /// キーの状態を更新
     pub fn update_key(&mut self, key_code: KeyCode, is_pressed: bool) {
-        let now = Instant::now();
+        let now = Date::now();
         
         if is_pressed {
             if !self.keys_pressed.contains(&key_code) {
@@ -469,7 +480,7 @@ impl InputState {
     
     /// タッチポイントを更新
     pub fn update_touch_point(&mut self, id: TouchId, x: f32, y: f32, force: f32, is_active: bool, delta_time: f32) {
-        let now = Instant::now();
+        let now = Date::now();
         
         if let Some(point) = self.touch_points.get_mut(&id) {
             point.previous_position = point.position;
@@ -500,7 +511,7 @@ impl InputState {
     
     /// アクションの状態を更新
     pub fn update_actions(&mut self) {
-        let now = Instant::now();
+        let now = Date::now();
         
         // 前回の状態を保存
         self.action_mapping.previous_actions = self.action_mapping.active_actions.clone();
@@ -542,13 +553,13 @@ impl InputState {
         for (key_code, repeat_config) in &self.action_mapping.config.key_repeat {
             if self.keys_pressed.contains(key_code) {
                 if let Some(press_time) = self.key_last_press_time.get(key_code) {
-                    let elapsed = now.duration_since(*press_time).as_millis() as u64;
+                    let elapsed = now - press_time;
                     
-                    if elapsed >= repeat_config.delay_ms {
+                    if elapsed >= repeat_config.delay_ms as f64 {
                         if let Some(repeat_time) = self.key_last_repeat_time.get(key_code) {
-                            let repeat_elapsed = now.duration_since(*repeat_time).as_millis() as u64;
+                            let repeat_elapsed = now - repeat_time;
                             
-                            if repeat_elapsed >= repeat_config.interval_ms {
+                            if repeat_elapsed >= repeat_config.interval_ms as f64 {
                                 // リピート発火
                                 for (action, key_codes) in &self.action_mapping.config.key_bindings {
                                     if key_codes.contains(key_code) {
@@ -784,31 +795,28 @@ impl System for InputSystem {
     }
 }
 
-/// 入力システムを初期化
+/// 入力システムを初期化してワールドに登録します。
 pub fn init_input_system(world: &mut World) {
-    // 入力システムを作成して登録
-    let input_system = InputSystem::new();
-    world.register_system(input_system);
+    // InputResourceを作成して登録
+    let input_resource = InputResource::new();
+    world.insert_resource(input_resource);
+
+    // 既存の InputSystem の登録は不要になる（InputResourceに含まれるため）
+    // world.register_system(InputSystem::new());
+    // 既存の InputState の登録も不要になる（InputResourceに含まれるため）
+    // world.insert_resource(InputState::new());
+
+    log::info!("⌨️ InputResource を初期化して登録しました");
 }
 
 /// 入力リソース
 /// 入力状態を管理するリソース
-#[derive(Debug)]
+#[derive(Debug, Resource)]
 pub struct InputResource {
     /// 入力状態
     pub state: InputState,
     /// 入力システム
     pub system: InputSystem,
-}
-
-impl Resource for InputResource {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
-        self
-    }
 }
 
 impl InputResource {

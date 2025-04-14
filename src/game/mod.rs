@@ -103,6 +103,10 @@ impl Game {
 pub fn init_game_systems(world: &mut World) {
     // 各ゲームシステムを初期化して登録
     use systems::*;
+    use resources::TimeResource; // TimeリソースをTimeResourceに修正
+    
+    // TimeResourceを登録
+    world.insert_resource(TimeResource::default()); // add_resourceをinsert_resourceに、TimeをTimeResourceに修正
     
     // TimeSystemを登録
     world.register_system(TimeSystem::new());

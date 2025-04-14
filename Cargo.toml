@@ -1,5 +1,5 @@
 [package]
-name = "ecs_wasm_game2"
+name = "ecs_wasm_game3"
 version = "0.1.0"
 edition = "2021"
 authors = ["ECS Wasm Game Developer"]
@@ -11,7 +11,7 @@ wasm-bindgen = { version = "0.2.100" }
 
 [lib]
 crate-type = ["cdylib", "rlib"]
-name = "ecs_wasm_game2"
+name = "ecs_wasm_game3"
 path = "src/lib.rs"
 
 [dependencies]

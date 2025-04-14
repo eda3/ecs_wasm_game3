@@ -3,7 +3,8 @@
 //! このモジュールは、タッチスクリーンジェスチャーの検出と処理を担当します。
 //! タップ、スワイプ、ピンチ、回転などのジェスチャーを検出します。
 
-use std::time::Instant;
+// Instantの代わりにjs_sys::Dateを使用（WebAssemblyで動作するため）
+use js_sys::Date;
 
 /// ジェスチャータイプの列挙型
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -48,8 +49,8 @@ pub struct GestureDetector {
     pub long_press_duration_ms: u64,
     /// スワイプの最小距離（ピクセル）
     pub min_swipe_distance: f32,
-    /// 最後のタップの時間
-    pub last_tap_time: Option<Instant>,
+    /// 最後のタップの時間（エポックからのミリ秒）
+    pub last_tap_time: Option<f64>,
     /// 最後のタップの位置
     pub last_tap_position: Option<(f32, f32)>,
 }
