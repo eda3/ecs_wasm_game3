@@ -69,7 +69,7 @@ fi
 
 echo -e "${GREEN}✅ Wasmパッケージのビルドが完了しました${NC}"
 
-# JSファイルをコピー
+# JavaScriptの生成されたファイルをwww/jsにコピー
 echo -e "${BLUE}📄 JavaScriptファイルをコピー中...${NC}"
 
 # プロジェクト名の確認

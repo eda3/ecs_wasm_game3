@@ -76,6 +76,27 @@ impl GameInstance {
     // 新しいゲームインスタンスを作成
     pub fn new(canvas_id: &str) -> Result<GameInstance, JsValue> {
         console::log_1(&"Creating new game instance".into());
+        log::warn!("🎮 ゲームインスタンス作成開始: canvas_id = {}", canvas_id);
+        
+        // テストでキャンバスに直接描画してみる
+        let window = web_sys::window().ok_or_else(|| JsValue::from_str("window is not available"))?;
+        let document = window.document().ok_or_else(|| JsValue::from_str("document is not available"))?;
+        let canvas = document
+            .get_element_by_id(canvas_id)
+            .ok_or_else(|| JsValue::from_str("canvas element not found"))?
+            .dyn_into::<web_sys::HtmlCanvasElement>()?;
+            
+        log::warn!("✅ キャンバス取得成功: {}x{}", canvas.width(), canvas.height());
+        
+        let ctx = canvas
+            .get_context("2d")?
+            .ok_or_else(|| JsValue::from_str("Failed to get 2d context"))?
+            .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
+            
+        // テスト描画
+        ctx.set_fill_style_str("#FF00FF");
+        ctx.fill_rect(50.0, 50.0, 150.0, 150.0);
+        log::warn!("💜 初期化時にテスト描画実行: ピンクの四角");
         
         // ワールドを初期化
         let mut world = ecs::World::new();
@@ -252,10 +273,86 @@ impl GameInstance {
     // ゲームを描画
     #[wasm_bindgen]
     pub fn render(&mut self) {
-        log::info!("🎮 GameInstance::render() 呼び出し開始");
-        // レンダリングシステムによる描画
-        self.world.render();
-        log::info!("✅ GameInstance::render() 呼び出し完了");
+        log::warn!("🎨 レンダリング開始 - デバッグバージョン");
+        
+        // JavaScriptからキャンバスとコンテキストを直接取得して強制描画
+        let window = match web_sys::window() {
+            Some(win) => win,
+            None => {
+                log::error!("❌ ウィンドウが取得できない！");
+                return;
+            }
+        };
+        
+        let document = match window.document() {
+            Some(doc) => doc,
+            None => {
+                log::error!("❌ ドキュメントが取得できない！");
+                return;
+            }
+        };
+        
+        let canvas = match document.get_element_by_id("game-canvas") {
+            Some(canvas) => canvas,
+            None => {
+                log::error!("❌ game-canvasが見つからない！");
+                return;
+            }
+        };
+        
+        let canvas: web_sys::HtmlCanvasElement = match canvas.dyn_into::<web_sys::HtmlCanvasElement>() {
+            Ok(canvas) => canvas,
+            Err(_) => {
+                log::error!("❌ キャンバス要素に変換できない！");
+                return;
+            }
+        };
+        
+        let context = match canvas.get_context("2d") {
+            Ok(Some(ctx)) => match ctx.dyn_into::<web_sys::CanvasRenderingContext2d>() {
+                Ok(ctx) => ctx,
+                Err(_) => {
+                    log::error!("❌ 2dコンテキストへの変換に失敗！");
+                    return;
+                }
+            },
+            _ => {
+                log::error!("❌ コンテキスト取得に失敗！");
+                return;
+            }
+        };
+        
+        log::warn!("🎯 キャンバスサイズ: {}x{}", canvas.width(), canvas.height());
+        
+        // 強制的に画面をクリア（赤っぽい背景）
+        context.set_fill_style_str("#440000");
+        context.fill_rect(
+            0.0, 
+            0.0, 
+            canvas.width() as f64, 
+            canvas.height() as f64
+        );
+        
+        // デバッグ用テキスト描画
+        context.set_font("30px Arial");
+        context.set_fill_style_str("#FFFFFF");
+        context.set_text_align("center");
+        let _ = context.fill_text(
+            "Rustからの強制描画テスト！", 
+            (canvas.width() / 2) as f64, 
+            (canvas.height() / 2) as f64
+        );
+        
+        // Rustのバージョン情報も表示してみる
+        context.set_font("20px Arial");
+        let _ = context.fill_text(
+            "Rust + WebAssembly ゲームエンジン", 
+            (canvas.width() / 2) as f64, 
+            ((canvas.height() as f64) / 2.0 + 40.0)
+        );
+        
+        // 通常のレンダリング処理は一旦スキップ
+        log::warn!("🏁 レンダリング完了 - デバッグ描画を実行！");
     }
     
     /// キーイベントを処理

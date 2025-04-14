@@ -22,6 +22,29 @@ async function init() {
         console.log('🔄 Wasmモジュールをロード中...');
         console.log('🔧 ブラウザ情報:', navigator.userAgent);
 
+        // 👇👇👇 ここから追加：直接描画テスト 👇👇👇
+        const canvas = document.getElementById('game-canvas');
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+                console.log('💥 直接描画テスト開始！');
+                // 画面を青でクリア
+                ctx.fillStyle = '#0066CC';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                // テキスト描画
+                ctx.font = 'bold 36px Arial';
+                ctx.fillStyle = '#FFFF00';
+                ctx.textAlign = 'center';
+                ctx.fillText('テスト描画 - これ見えたら勝ち！', canvas.width / 2, canvas.height / 2);
+
+                console.log('✨ 直接描画テスト完了！何か表示された？');
+            } else {
+                console.error('😭 2Dコンテキスト取得失敗！');
+            }
+        }
+        // 👆👆👆 ここまで追加 👆👆👆
+
         // wasm-bindgenが生成したJSモジュールをインポート
         const jsModule = await import('/js/ecs_wasm_game3.js');
         console.log('✅ JSラッパーをロード完了');
@@ -291,6 +314,28 @@ function startGameLoop() {
         }
 
         try {
+            // 👇👇👇 ここから追加：ゲームループ内直接描画 👇👇👇
+            // ゲームループから直接描画テスト
+            const canvas = document.getElementById('game-canvas');
+            if (canvas) {
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    // 緑色の背景
+                    ctx.fillStyle = '#006600';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // フレームカウンターを表示
+                    ctx.font = '24px Arial';
+                    ctx.fillStyle = 'white';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(`フレームカウント: ${frameCount}`, canvas.width / 2, 50);
+                    ctx.fillText(`FPS: ${fpsValue}`, canvas.width / 2, 90);
+                }
+            }
+            // 👆👆👆 ここまで追加 👆👆👆
+
+            console.log("🔄 ゲームループ実行中...");
+
             // ゲーム状態を更新
             let updateFunction = null;
             if (gameInstance && typeof gameInstance.update === 'function') {
