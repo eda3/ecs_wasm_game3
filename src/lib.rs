@@ -58,6 +58,19 @@ pub struct GameInstance {
     instance_id: String,
 }
 
+// Cloneの実装
+impl Clone for GameInstance {
+    fn clone(&self) -> Self {
+        log::info!("GameInstanceをクローンします");
+        GameInstance {
+            world: self.world.clone(), // Worldのクローンを作成
+            network_client_id: self.network_client_id.clone(),
+            last_update_time: self.last_update_time,
+            instance_id: self.instance_id.clone(),
+        }
+    }
+}
+
 #[wasm_bindgen]
 impl GameInstance {
     // 新しいゲームインスタンスを作成
@@ -82,34 +95,25 @@ impl GameInstance {
         // インスタンスIDを生成
         let instance_id = format!("game_{}", js_sys::Date::now());
         
-        // インスタンスを作成
+        // インスタンスを作成して返す
         let instance = GameInstance {
-            world,
-            network_client_id: None,
-            last_update_time: js_sys::Date::now(),
-            instance_id: instance_id.clone(),
-        };
-        
-        // グローバルストアに弱参照として保存
-        let rc_instance = Rc::new(RefCell::new(instance));
-        let weak_ref = Rc::downgrade(&rc_instance);
-        GAME_INSTANCES.with(|instances| {
-            instances.borrow_mut().insert(instance_id.clone(), weak_ref);
-        });
-        
-        // インスタンスを返す
-        Ok(GameInstance {
-            world: ecs::World::new(),
+            world,  // 初期化済みのワールドを使用
             network_client_id: None,
             last_update_time: js_sys::Date::now(),
             instance_id,
-        })
+        };
+        
+        // グローバルストアには保存しない（単純化のため）
+        // 必要に応じてあとで追加できます
+        
+        // 初期化済みのインスタンスを返す
+        Ok(instance)
     }
     
     // サーバーに接続
     #[wasm_bindgen]
     pub fn connect_to_server(&mut self, server_url: &str) -> Result<(), JsValue> {
-        log::info!("Connecting to server: {}", server_url);
+        log::info!("サーバーに接続中: {}", server_url);
         
         // 既存の接続があれば削除
         if let Some(client_id) = &self.network_client_id {
@@ -127,44 +131,52 @@ impl GameInstance {
             ..Default::default()
         };
         
-        // ネットワーククライアントの作成（循環参照なし）
+        // ネットワーククライアントを作成して保存
         let client = network::client::NetworkClient::new(network_config);
+        let client_rc = Rc::new(RefCell::new(client));
+        
+        // クライアントIDを設定
+        self.network_client_id = Some(client_id.clone());
         
         // グローバルマップに保存
         NETWORK_CLIENTS.with(|clients| {
-            clients.borrow_mut().insert(client_id.clone(), Rc::new(RefCell::new(client)));
+            clients.borrow_mut().insert(client_id.clone(), client_rc.clone());
         });
-        self.network_client_id = Some(client_id.clone());
         
-        // クライアントの接続を試行
-        let result = NETWORK_CLIENTS.with(|clients| {
-            let clients = clients.borrow();
-            if let Some(client_rc) = clients.get(&client_id) {
-                let mut client = client_rc.borrow_mut();
-                
-                // 接続を試行
-                match client.connect() {
+        // ネットワークリソースをワールドに追加
+        let network_resource = network::NetworkResource::new(server_url.to_string());
+        self.world.insert_resource(network_resource);
+        
+        // 別のスコープでクライアントに接続処理を実行
+        let connect_result = NETWORK_CLIENTS.with(|clients| {
+            if let Some(client_ref) = clients.borrow().get(&client_id) {
+                let mut client = client_ref.borrow_mut();
+                // 新しいconnectメソッドを使用（URLを渡す）
+                match client.connect(server_url) {
                     Ok(_) => {
-                        log::info!("Connection initiated successfully");
-                        
-                        // ネットワークコンポーネントをワールドに追加
-                        let network_resource = network::NetworkResource::new(server_url.to_string());
-                        self.world.insert_resource(network_resource);
-                        
+                        log::info!("🎉 サーバー接続成功！");
                         Ok(())
                     },
                     Err(err) => {
-                        let error_msg = format!("Failed to connect: {:?}", err);
-                        log::error!("{}", error_msg);
+                        let error_msg = format!("サーバー接続中にエラーが発生しました: {:?}", err);
+                        log::error!("😭 {}", error_msg);
                         Err(JsValue::from_str(&error_msg))
                     }
                 }
             } else {
-                Err(JsValue::from_str("Failed to store network client"))
+                Err(JsValue::from_str("クライアント接続に失敗しました"))
             }
         });
         
-        result
+        // エラーが発生した場合はクライアントを削除
+        if connect_result.is_err() {
+            NETWORK_CLIENTS.with(|clients| {
+                clients.borrow_mut().remove(&client_id);
+            });
+            self.network_client_id = None;
+        }
+        
+        connect_result
     }
     
     // サーバーから切断
@@ -268,8 +280,10 @@ impl GameInstance {
     // ゲームを描画
     #[wasm_bindgen]
     pub fn render(&mut self) {
+        log::info!("🎮 GameInstance::render() 呼び出し開始");
         // レンダリングシステムによる描画
         self.world.render();
+        log::info!("✅ GameInstance::render() 呼び出し完了");
     }
     
     /// キーイベントを処理

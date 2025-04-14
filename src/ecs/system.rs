@@ -213,6 +213,14 @@ impl SystemProcessor {
     }
 }
 
+// SystemProcessorのクローン実装
+impl Clone for SystemProcessor {
+    fn clone(&self) -> Self {
+        log::warn!("SystemProcessorのクローンは基本機能のみコピーします"); // 警告ログ
+        SystemProcessor::new() // 空の新しいプロセッサを返す
+    }
+}
+
 /// システムビルダー
 /// システムの構築を支援する
 pub struct SystemBuilder<S: System> {

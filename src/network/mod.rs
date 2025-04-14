@@ -80,7 +80,7 @@ impl std::fmt::Display for NetworkError {
 impl std::error::Error for NetworkError {}
 
 /// ネットワーク設定リソース
-#[derive(Debug, Resource)]
+#[derive(Debug, Resource, Clone)]
 pub struct NetworkConfig {
     /// サーバーURL
     pub server_url: String,

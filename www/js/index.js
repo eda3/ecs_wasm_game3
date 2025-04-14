@@ -16,6 +16,7 @@ let animationFrameId = null;
 async function init() {
     try {
         console.log('🔄 Wasmモジュールをロード中...');
+        console.log('🔧 ブラウザ情報:', navigator.userAgent);
 
         // Wasmモジュールをロード前に環境チェック
         if (typeof window.FinalizationRegistry === 'undefined') {
@@ -34,7 +35,7 @@ async function init() {
 
         try {
             // Wasmモジュールをロード
-            gameModule = await import('./ecs_wasm_game2.js');
+            gameModule = await import('./ecs_wasm_game3.js');
             await gameModule.default();
             console.log('✅ Wasmモジュールのロードに成功しました');
         } catch (moduleError) {
@@ -54,15 +55,29 @@ async function init() {
         console.log('🎮 Wasm Game Module loaded successfully!');
 
         // ゲームキャンバスを設定
+        console.log('🖼️ キャンバス設定開始');
         setupCanvas();
+        console.log('✅ キャンバス設定完了');
+
+        // キャンバスに直接描画してテスト
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        console.log('🎨 テスト描画開始 - 赤い四角形');
+        ctx.fillStyle = 'red';
+        ctx.fillRect(10, 10, 100, 100);
+        console.log('✅ テスト描画完了');
 
         // イベントリスナーを設定
         setupEventListeners();
 
         // ゲームインスタンスを初期化
         try {
+            console.log('🚀 ゲームインスタンス初期化開始');
             gameInstance = gameModule.initialize_game('game-canvas');
             console.log('🚀 Game initialized successfully!');
+
+            // ゲームインスタンスのメソッド一覧を表示
+            console.log('📋 利用可能なメソッド:', Object.getOwnPropertyNames(Object.getPrototypeOf(gameInstance)));
         } catch (initError) {
             console.error('💥 Failed to initialize game instance:', initError);
 
@@ -177,6 +192,18 @@ function connectToServer() {
     console.log('🔍 接続処理開始...');
     console.log(`🔍 入力されたURL: "${serverUrl}"`);
 
+    // キャンバスの状態を確認
+    const canvas = document.getElementById('game-canvas');
+    console.log(`📊 キャンバス状態確認:
+    - サイズ: ${canvas.width}x${canvas.height}
+    - 表示状態: ${window.getComputedStyle(canvas).display}
+    - 可視性: ${window.getComputedStyle(canvas).visibility}
+    - z-index: ${window.getComputedStyle(canvas).zIndex}
+    - opacity: ${window.getComputedStyle(canvas).opacity}`);
+
+    // ゲームインスタンスのメソッドを列挙
+    console.log('🧩 ゲームインスタンスのメソッド:', Object.getOwnPropertyNames(Object.getPrototypeOf(gameInstance)));
+
     // サーバーURLが空の場合は、デフォルトのサーバーIPを使用
     if (!serverUrl) {
         // localhost:8101をデフォルトに設定（サーバーが同じホストで動いている場合）
@@ -274,11 +301,21 @@ function startGameLoop() {
         }
 
         try {
+            console.log('🔄 ゲームループ実行中: deltaTime =', deltaTime);
+
             // ゲーム状態を更新
+            console.log('⏱️ ゲーム状態更新開始');
             gameInstance.update(deltaTime);
+            console.log('✅ ゲーム状態更新完了');
 
             // 描画処理
+            console.log('🎨 レンダリング開始');
             gameInstance.render();
+            console.log('✅ レンダリング完了');
+
+            // Canvas要素のサイズを確認
+            const canvas = document.getElementById('game-canvas');
+            console.log(`📏 キャンバスサイズ: ${canvas.width}x${canvas.height}`);
 
             // 次のフレームをリクエスト
             animationFrameId = requestAnimationFrame(gameLoop);

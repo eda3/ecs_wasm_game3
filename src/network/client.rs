@@ -5,11 +5,12 @@
 
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
-use web_sys::{WebSocket, MessageEvent, ErrorEvent, CloseEvent};
+use web_sys::{WebSocket, MessageEvent, ErrorEvent, CloseEvent, Event};
 use js_sys::{Function, Date, Array, JSON};
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::cell::RefCell;
+use log;
 
 use super::protocol::{NetworkMessage, MessageType};
 use super::messages::{InputData, PlayerData, EntitySnapshot, ComponentData};
@@ -44,6 +45,7 @@ impl Default for NetworkComponent {
 }
 
 /// ネットワーククライアント
+#[derive(Clone)]
 pub struct NetworkClient {
     /// WebSocket接続
     connection: Option<WebSocket>,
@@ -75,6 +77,8 @@ pub struct NetworkClient {
     last_ping_time: Option<f64>,
     /// 接続試行回数
     connection_attempts: u32,
+    /// サーバーURL
+    server_url: String,
 }
 
 impl NetworkClient {
@@ -96,140 +100,90 @@ impl NetworkClient {
             connected_at: None,
             last_ping_time: None,
             connection_attempts: 0,
+            server_url: String::new(),
         }
     }
 
     /// サーバーに接続
-    pub fn connect(&mut self) -> Result<(), NetworkError> {
-        if self.connection_state == ConnectionState::Connected || 
-           self.connection_state == ConnectionState::Connecting {
+    pub fn connect(&mut self, url: &str) -> Result<(), NetworkError> {
+        if self.connection_state == ConnectionState::Connected {
             return Ok(());
         }
 
         self.connection_state = ConnectionState::Connecting;
-        self.connection_attempts += 1;
+        self.server_url = url.to_string();
 
         // WebSocketの作成
-        let ws = match WebSocket::new(&self.config.server_url) {
+        let ws = match WebSocket::new(&self.server_url) {
             Ok(ws) => ws,
             Err(err) => {
-                let error_msg = format!("WebSocket接続の作成に失敗: {:?}", err);
-                self.connection_state = ConnectionState::Error(error_msg.clone());
+                let error_msg = format!("WebSocket作成に失敗: {:?}", err);
+                log::error!("{}", error_msg);
+                self.connection_state = ConnectionState::Disconnected;
                 return Err(NetworkError::ConnectionError(error_msg));
             }
         };
 
-        // イベントハンドラの設定
-        let on_open = Closure::wrap(Box::new(move |_| {
-            // 接続が確立されたときの処理
-            web_sys::console::log_1(&"WebSocket接続が確立されました".into());
-        }) as Box<dyn FnMut(JsValue)>);
+        // バイナリ形式を設定
+        ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
-        let client_ptr = Rc::new(RefCell::new(self as *mut NetworkClient));
-        
-        // メッセージ受信ハンドラ
-        let on_message_client = Rc::clone(&client_ptr);
-        let on_message = Closure::wrap(Box::new(move |event: MessageEvent| {
-            let client = unsafe { &mut *on_message_client.borrow_mut() };
-            if let Ok(text) = event.data().dyn_into::<js_sys::JsString>() {
-                let text_str = String::from(text);
-                
-                // デバッグログ: 受信メッセージの内容を表示
-                web_sys::console::log_1(&format!("受信メッセージ(生): {}", text_str).into());
-                
-                match NetworkMessage::from_json(&text_str) {
-                    Ok(message) => {
-                        // デバッグログ: パース成功とメッセージタイプを表示
-                        web_sys::console::log_1(&format!("メッセージ解析成功: タイプ={:?}", message.message_type).into());
-                        unsafe {
-                            (*(*client)).message_queue.push_back(message);
+        // 自己参照のクロージャを回避するために弱参照を作成
+        let message_queue = Rc::new(RefCell::new(self.message_queue.clone()));
+        let message_queue_weak = Rc::downgrade(&message_queue);
+
+        // WebSocketが開いたときのコールバック
+        let onopen_callback = Closure::wrap(Box::new(move |_event: Event| {
+            log::info!("🌐 WebSocket接続完了！");
+        }) as Box<dyn FnMut(Event)>);
+
+        // メッセージを受信したときのコールバック
+        let onmessage_callback = Closure::wrap(Box::new(move |event: MessageEvent| {
+            // メッセージキューが存在する場合のみ処理
+            if let Some(message_queue) = message_queue_weak.upgrade() {
+                if let Ok(text) = event.data().dyn_into::<js_sys::JsString>() {
+                    let text_str = text.as_string().unwrap();
+                    match NetworkMessage::from_json(&text_str) {
+                        Ok(message) => {
+                            log::debug!("📩 メッセージ受信: {:?}", message);
+                            // 安全にメッセージをキューに追加
+                            message_queue.borrow_mut().push_back(message);
                         }
-                    },
-                    Err(err) => {
-                        // エラーログを詳細化
-                        web_sys::console::error_1(&format!("メッセージの解析エラー: {:?}", err).into());
-                        
-                        // JSON構造を詳細にチェック
-                        if let Ok(obj) = js_sys::JSON::parse(&text_str) {
-                            if obj.is_object() {
-                                let obj = js_sys::Object::from(obj);
-                                let has_type = js_sys::Reflect::has(&obj, &"type".into()).unwrap_or(false);
-                                web_sys::console::log_1(&format!("受信JSONにtypeフィールドがある: {}", has_type).into());
-                                
-                                if has_type {
-                                    if let Ok(type_val) = js_sys::Reflect::get(&obj, &"type".into()) {
-                                        web_sys::console::log_1(&format!("typeフィールドの値: {:?}", type_val).into());
-                                    }
-                                }
-                            } else {
-                                web_sys::console::error_1(&"受信データはJSONオブジェクトではありません".into());
-                            }
-                        } else {
-                            web_sys::console::error_1(&"受信データは有効なJSONではありません".into());
+                        Err(err) => {
+                            log::error!("❌ メッセージのパースに失敗: {:?}", err);
                         }
                     }
                 }
-            } else {
-                // テキスト以外のデータを受信した場合
-                web_sys::console::error_1(&"非テキストメッセージを受信しました".into());
-                
-                // データ型の詳細を出力
-                let data_type = match event.data().js_typeof().as_string().unwrap_or_default().as_str() {
-                    "string" => "文字列",
-                    "object" => "オブジェクト",
-                    "boolean" => "真偽値",
-                    "number" => "数値",
-                    "undefined" => "未定義",
-                    "function" => "関数",
-                    "symbol" => "シンボル",
-                    "bigint" => "BigInt",
-                    _ => "不明"
-                };
-                web_sys::console::log_1(&format!("受信データ型: {}", data_type).into());
             }
         }) as Box<dyn FnMut(MessageEvent)>);
 
-        // エラーハンドラ
-        let on_error_client = Rc::clone(&client_ptr);
-        let on_error = Closure::wrap(Box::new(move |event: ErrorEvent| {
-            let client = unsafe { &mut *on_error_client.borrow_mut() };
-            let error_msg = format!("WebSocketエラー: {:?}", event);
-            unsafe {
-                (*(*client)).connection_state = ConnectionState::Error(error_msg.clone());
-                (*(*client)).last_error = Some(error_msg);
-            }
-            web_sys::console::error_1(&"WebSocketエラーが発生しました".into());
+        // エラーが発生したときのコールバック
+        let onerror_callback = Closure::wrap(Box::new(move |event: ErrorEvent| {
+            log::error!("❌ WebSocketエラー: {:?}", event);
         }) as Box<dyn FnMut(ErrorEvent)>);
 
-        // 切断ハンドラ
-        let on_close_client = Rc::clone(&client_ptr);
-        let on_close = Closure::wrap(Box::new(move |event: CloseEvent| {
-            let client = unsafe { &mut *on_close_client.borrow_mut() };
-            unsafe {
-                (*(*client)).connection_state = ConnectionState::Disconnected;
-            }
-            let code = event.code();
-            let reason = event.reason();
-            web_sys::console::log_2(
-                &format!("WebSocket接続が閉じられました（コード: {}）", code).into(),
-                &reason.into()
-            );
+        // WebSocketが閉じたときのコールバック
+        let onclose_callback = Closure::wrap(Box::new(move |event: CloseEvent| {
+            log::warn!("🔌 WebSocket切断: コード={}, 理由={}", event.code(), event.reason());
         }) as Box<dyn FnMut(CloseEvent)>);
 
-        // イベントハンドラをWebSocketにセット
-        ws.set_onopen(Some(on_open.as_ref().unchecked_ref()));
-        ws.set_onmessage(Some(on_message.as_ref().unchecked_ref()));
-        ws.set_onerror(Some(on_error.as_ref().unchecked_ref()));
-        ws.set_onclose(Some(on_close.as_ref().unchecked_ref()));
+        // コールバックの設定
+        ws.set_onopen(Some(onopen_callback.as_ref().unchecked_ref()));
+        ws.set_onmessage(Some(onmessage_callback.as_ref().unchecked_ref()));
+        ws.set_onerror(Some(onerror_callback.as_ref().unchecked_ref()));
+        ws.set_onclose(Some(onclose_callback.as_ref().unchecked_ref()));
 
-        // イベントハンドラをリークさせないようにする
-        on_open.forget();
-        on_message.forget();
-        on_error.forget();
-        on_close.forget();
+        // コールバックのリーク防止（クロージャをメモリに保持）
+        onopen_callback.forget();
+        onmessage_callback.forget();
+        onerror_callback.forget();
+        onclose_callback.forget();
 
+        // 接続の保存
         self.connection = Some(ws);
-        
+        self.connection_state = ConnectionState::Connected;
+        self.connected_at = Some(js_sys::Date::now() as f64);
+
+        log::info!("🔄 サーバーに接続中: {}", url);
         Ok(())
     }
 
@@ -309,7 +263,7 @@ impl NetworkClient {
         self.check_connection_status();
         
         // 受信メッセージの処理
-        self.process_messages(world);
+        self.process_messages();
         
         // 接続されている場合の定期処理
         if self.connection_state == ConnectionState::Connected {
@@ -333,7 +287,9 @@ impl NetworkClient {
                 // タイムアウト - 再接続を試みる
                 if self.connection_attempts < self.config.reconnect_attempts {
                     self.disconnect().ok();
-                    self.connect().ok();
+                    // 再帰的な参照を避けるために一時変数にURLを保存
+                    let server_url = self.server_url.clone();
+                    self.connect(&server_url).ok();
                 } else {
                     // 再接続試行回数を超えた場合
                     self.connection_state = ConnectionState::Error("接続タイムアウト".to_string());
@@ -342,113 +298,111 @@ impl NetworkClient {
         }
     }
 
-    /// 受信メッセージの処理
-    fn process_messages(&mut self, world: &mut World) {
-        while let Some(message) = self.message_queue.pop_front() {
-            match message.message_type {
-                MessageType::ConnectResponse { player_id, success, message: msg } => {
-                    if success {
-                        self.connection_state = ConnectionState::Connected;
-                        self.player_id = Some(player_id);
-                        self.connected_at = Some(Date::now());
+    /// メッセージキューを処理し、各メッセージに対して適切なアクションを実行
+    pub fn process_messages(&mut self) {
+        // 接続が確立されていない場合は処理しない
+        if self.connection_state != ConnectionState::Connected {
+            return;
+        }
+
+        // キューからすべてのメッセージを取り出し処理する
+        let message_count = self.message_queue.len();
+        if message_count > 0 {
+            web_sys::console::log_1(&format!("処理するメッセージ数: {}", message_count).into());
+        }
+
+        for _ in 0..message_count {
+            if let Some(message) = self.message_queue.pop_front() {
+                match message.message_type {
+                    MessageType::ConnectResponse { player_id, success, message: msg } => {
+                        if success {
+                            web_sys::console::log_1(&format!("クライアント接続: ID={}", player_id).into());
+                            // クライアントIDを設定
+                            self.player_id = Some(player_id);
+                            self.connected_at = Some(Date::now());
+                            web_sys::console::log_1(&format!("自身のクライアントID設定: {}", player_id).into());
+                        } else {
+                            web_sys::console::error_1(&format!("接続失敗: {}", msg.unwrap_or_default()).into());
+                            self.player_id = None;
+                            self.connected_at = None;
+                        }
+                    }
+                    MessageType::Disconnect { reason } => {
+                        web_sys::console::log_1(&format!("クライアント切断: {:?}", reason).into());
+                        // 接続の切断を処理
+                        self.player_id = None;
+                        self.connected_at = None;
+                    }
+                    MessageType::EntityCreate { entity_id } => {
+                        web_sys::console::log_1(&format!("エンティティ作成: ID={}", entity_id).into());
+                        // ここでエンティティ作成処理を実装
+                    }
+                    MessageType::EntityDelete { entity_id } => {
+                        web_sys::console::log_1(&format!("エンティティ削除: ID={}", entity_id).into());
+                        // ここでエンティティ削除処理を実装
+                    }
+                    MessageType::ComponentUpdate => {
+                        // コンポーネント更新の処理
+                        web_sys::console::log_1(&"コンポーネント更新メッセージを受信".into());
+                        if let Some(entity_id) = message.entity_id {
+                            if let Some(components) = &message.components {
+                                web_sys::console::log_1(&format!("エンティティ{}のコンポーネント更新", entity_id).into());
+                                // コンポーネント更新の処理を実装
+                            }
+                        }
+                    }
+                    MessageType::Input => {
+                        // 入力メッセージの処理
+                        web_sys::console::log_1(&"入力メッセージを受信".into());
+                        if let Some(player_id) = message.player_id {
+                            if player_id != self.player_id.unwrap_or(0) { // 自分の入力はスキップ
+                                web_sys::console::log_1(&format!("プレイヤー{}からの入力", player_id).into());
+                                // 入力処理を実装
+                            }
+                        }
+                    }
+                    MessageType::TimeSync { client_time, server_time } => {
+                        // 時間同期の処理
+                        let now = Date::now();
+                        let rtt = now - client_time;
+                        self.rtt = rtt;
                         
-                        if self.config.debug_mode {
-                            web_sys::console::log_1(&format!("接続成功: Player ID = {}", player_id).into());
-                        }
-                    } else {
-                        let error_msg = format!("接続拒否: {}", msg.unwrap_or_default());
-                        self.connection_state = ConnectionState::Error(error_msg.clone());
-                        self.last_error = Some(error_msg);
-                    }
-                },
-                MessageType::EntityCreate { entity_id } => {
-                    // 新しいエンティティの作成
-                    // 実際の実装ではWorldにエンティティを追加する処理が必要
-                    if self.config.debug_mode {
-                        web_sys::console::log_1(&format!("エンティティ作成: {}", entity_id).into());
-                    }
-                },
-                MessageType::EntityDelete { entity_id } => {
-                    // エンティティの削除
-                    // 実際の実装ではWorldからエンティティを削除する処理が必要
-                    if self.config.debug_mode {
-                        web_sys::console::log_1(&format!("エンティティ削除: {}", entity_id).into());
-                    }
-                },
-                MessageType::ComponentUpdate => {
-                    // コンポーネント更新の処理
-                    if let Some(entity_id) = message.entity_id {
-                        if let Some(components) = message.components {
-                            // エンティティスナップショットの作成と保存
-                            let mut snapshot = EntitySnapshot::new(entity_id, message.timestamp);
-                            for (name, data) in components {
-                                snapshot.add_component(&name, data);
-                            }
-                            
-                            if let Some(owner) = message.player_id {
-                                snapshot.set_owner(owner);
-                            }
-                            
-                            // スナップショットを保存
-                            self.entity_snapshots
-                                .entry(entity_id)
-                                .or_insert_with(Vec::new)
-                                .push(snapshot);
-                                
-                            // 古いスナップショットを削除
-                            self.cleanup_old_snapshots(entity_id);
-                        }
-                    }
-                },
-                MessageType::TimeSync { client_time, server_time } => {
-                    // 時間同期の処理
-                    let now = Date::now();
-                    let rtt = now - client_time;
-                    self.rtt = rtt;
-                    
-                    // サーバー時間とクライアント時間の差を計算
-                    // RTTの半分をオフセットとして使用
-                    let time_offset = server_time - (now - rtt / 2.0);
-                    self.time_sync_data.time_offset = time_offset;
-                    self.time_sync_data.rtt = rtt;
-                    self.time_sync_data.last_sync = now;
-                    
-                    if self.config.debug_mode {
+                        // サーバー時間とクライアント時間の差を計算
+                        let time_offset = server_time - (now - rtt / 2.0);
+                        self.time_sync_data.time_offset = time_offset;
+                        self.time_sync_data.rtt = rtt;
+                        self.time_sync_data.last_sync = now;
+                        
                         web_sys::console::log_1(&format!("時間同期: オフセット = {}ms, RTT = {}ms", 
-                                           time_offset, rtt).into());
+                                                        time_offset, rtt).into());
                     }
-                },
-                MessageType::Pong { client_time, server_time } => {
-                    // Pongメッセージの処理
-                    let now = Date::now();
-                    let rtt = now - client_time;
-                    self.rtt = rtt;
-                    
-                    if self.config.debug_mode {
+                    MessageType::Ping { client_time } => {
+                        // Pingメッセージの処理
+                        web_sys::console::log_1(&format!("Pingメッセージを受信: {}", client_time).into());
+                        // 必要に応じてPong応答を送信
+                    }
+                    MessageType::Pong { client_time, server_time: _ } => {
+                        // Pongメッセージの処理
+                        let now = Date::now();
+                        let rtt = now - client_time;
+                        self.rtt = rtt;
+                        
                         web_sys::console::log_1(&format!("Pong: RTT = {}ms", rtt).into());
                     }
-                },
-                MessageType::Error { code, message: error_msg } => {
-                    // エラーメッセージの処理
-                    self.last_error = Some(format!("サーバーエラー ({}): {}", code, error_msg));
-                    web_sys::console::error_1(&format!("サーバーエラー: {}", error_msg).into());
-                },
-                _ => {}
-            }
-        }
-    }
-
-    /// 古いスナップショットのクリーンアップ
-    fn cleanup_old_snapshots(&mut self, entity_id: u32) {
-        const MAX_SNAPSHOTS: usize = 20; // エンティティごとに保持する最大スナップショット数
-        
-        if let Some(snapshots) = self.entity_snapshots.get_mut(&entity_id) {
-            if snapshots.len() > MAX_SNAPSHOTS {
-                // 古い順にソート
-                snapshots.sort_by(|a, b| a.timestamp.partial_cmp(&b.timestamp).unwrap());
-                
-                // 最大数を超えた分を削除
-                snapshots.drain(0..(snapshots.len() - MAX_SNAPSHOTS));
+                    MessageType::Error { code, message: error_msg } => {
+                        // エラーメッセージの処理
+                        web_sys::console::error_1(&format!("サーバーエラー ({}): {}", code, error_msg).into());
+                        self.last_error = Some(format!("サーバーエラー ({}): {}", code, error_msg));
+                    }
+                    MessageType::Connect => {
+                        // Connectメッセージは通常クライアントからサーバーに送信されるもの
+                        web_sys::console::warn_1(&"サーバーからConnectメッセージを受信（異常）".into());
+                    }
+                    _ => {
+                        // 未知のメッセージタイプ
+                        web_sys::console::warn_1(&format!("未知のメッセージタイプ: {:?}", message.message_type).into());
+                    }
+                }
             }
         }
     }

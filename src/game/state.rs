@@ -4,6 +4,7 @@
 
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
+use log;
 
 /// ゲームの状態を表す列挙型
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,11 +42,17 @@ impl GameState {
     /// 
     /// 初期化されたGameStateインスタンス、または初期化エラー
     pub fn new(canvas: HtmlCanvasElement) -> Result<Self, JsValue> {
+        // キャンバス情報をログ出力
+        log::info!("🖼️ GameState::new() - キャンバスID: {}, サイズ: {}x{}", 
+                   canvas.id(), canvas.width(), canvas.height());
+        
         // 2D描画コンテキストの取得
         let context = canvas
             .get_context("2d")?
             .unwrap()
             .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
+        
+        log::info!("✅ 2D描画コンテキスト取得成功");
 
         Ok(Self {
             current_state: GameStateType::Splash,
@@ -71,6 +78,10 @@ impl GameState {
 
     /// ゲームを描画します。
     pub fn render(&self) -> Result<(), JsValue> {
+        // キャンバスの状態をログ出力
+        log::info!("🖼️ render()開始: キャンバスサイズ {}x{}", 
+                   self.canvas.width(), self.canvas.height());
+
         // キャンバスをクリア
         self.context.clear_rect(
             0.0,
@@ -79,13 +90,31 @@ impl GameState {
             self.canvas.height() as f64,
         );
 
-        match self.current_state {
-            GameStateType::Splash => self.render_splash(),
-            GameStateType::MainMenu => self.render_main_menu(),
-            GameStateType::Playing => self.render_playing(),
-            GameStateType::Paused => self.render_paused(),
-            GameStateType::GameOver => self.render_game_over(),
-        }
+        let result = match self.current_state {
+            GameStateType::Splash => {
+                log::info!("🎬 スプラッシュ画面のレンダリング開始");
+                self.render_splash()
+            },
+            GameStateType::MainMenu => {
+                log::info!("📋 メインメニューのレンダリング開始");
+                self.render_main_menu()
+            },
+            GameStateType::Playing => {
+                log::info!("🎮 プレイ中画面のレンダリング開始");
+                self.render_playing()
+            },
+            GameStateType::Paused => {
+                log::info!("⏸️ ポーズ画面のレンダリング開始");
+                self.render_paused()
+            },
+            GameStateType::GameOver => {
+                log::info!("🏁 ゲームオーバー画面のレンダリング開始");
+                self.render_game_over()
+            },
+        };
+        
+        log::info!("✅ render()完了: 状態={:?}", self.current_state);
+        result
     }
 
     /// キー入力を処理します。
@@ -158,53 +187,46 @@ impl GameState {
 
     // 各状態の描画処理
     fn render_splash(&self) -> Result<(), JsValue> {
-        // 画面クリア
-        self.context.clear_rect(
-            0.0,
-            0.0,
-            self.canvas.width() as f64,
-            self.canvas.height() as f64,
-        );
-
-        // 背景色設定
-        self.context.set_fill_style_str("#1a75ff"); // 青系の背景
+        log::info!("🔍 render_splash: 描画処理開始");
+        
+        // 背景を黒で塗りつぶす
+        self.context.set_fill_style_str("#000000");
         self.context.fill_rect(
             0.0,
-            0.0, 
+            0.0,
             self.canvas.width() as f64,
             self.canvas.height() as f64,
         );
+        log::info!("✓ 背景を黒で塗りつぶし完了");
 
-        // タイトルテキスト
+        // タイトルを表示
         self.context.set_font("48px Arial");
         self.context.set_text_align("center");
-        self.context.set_fill_style_str("white");
-        self.context.fill_text(
-            "Rust WebAssembly Game",
+        self.context.set_fill_style_str("#FFFFFF");
+        
+        let result = self.context.fill_text(
+            "ECS Wasm Game",
             (self.canvas.width() / 2) as f64,
-            (self.canvas.height() / 4) as f64,
-        )?;
+            (self.canvas.height() / 3) as f64,
+        );
+        log::info!("✓ タイトルテキスト描画: {:?}", result);
 
-        // 説明テキスト
+        // サブタイトルを表示
         self.context.set_font("24px Arial");
-        self.context.fill_text(
-            "Press any key or click to start",
+        let result = self.context.fill_text(
+            "Press any key to continue",
             (self.canvas.width() / 2) as f64,
             (self.canvas.height() / 2) as f64,
-        )?;
-
-        // バージョン情報
-        self.context.set_font("16px Arial");
-        self.context.fill_text(
-            "Version 0.1.0",
-            (self.canvas.width() / 2) as f64,
-            (self.canvas.height() as f64 - 20.0),
-        )?;
-
+        );
+        log::info!("✓ サブタイトルテキスト描画: {:?}", result);
+        
+        log::info!("🏁 render_splash: 描画処理完了");
         Ok(())
     }
 
     fn render_main_menu(&self) -> Result<(), JsValue> {
+        log::info!("🔍 render_main_menu: 描画処理開始");
+        
         // 画面クリア
         self.context.clear_rect(
             0.0,
@@ -212,6 +234,7 @@ impl GameState {
             self.canvas.width() as f64,
             self.canvas.height() as f64,
         );
+        log::info!("✓ 画面クリア完了");
 
         // 背景色設定
         self.context.set_fill_style_str("#333366"); // 濃い青
@@ -221,16 +244,18 @@ impl GameState {
             self.canvas.width() as f64,
             self.canvas.height() as f64,
         );
+        log::info!("✓ 背景色設定完了");
 
         // タイトルテキスト
         self.context.set_font("48px Arial");
         self.context.set_text_align("center");
         self.context.set_fill_style_str("white");
-        self.context.fill_text(
+        let result = self.context.fill_text(
             "Main Menu",
             (self.canvas.width() / 2) as f64,
             (self.canvas.height() / 4) as f64,
-        )?;
+        );
+        log::info!("✓ タイトルテキスト描画: {:?}", result);
 
         // メニューオプション
         self.context.set_font("24px Arial");
@@ -245,21 +270,24 @@ impl GameState {
         let start_y = (self.canvas.height() / 2) as f64;
 
         for (i, option) in options.iter().enumerate() {
-            self.context.fill_text(
+            let result = self.context.fill_text(
                 option,
                 (self.canvas.width() / 2) as f64,
                 start_y + (i as f64 * spacing),
-            )?;
+            );
+            log::info!("✓ メニューオプション「{}」描画: {:?}", option, result);
         }
 
         // 操作説明
         self.context.set_font("16px Arial");
-        self.context.fill_text(
+        let result = self.context.fill_text(
             "Use keyboard (1-4) or mouse to select",
             (self.canvas.width() / 2) as f64,
             (self.canvas.height() as f64 - 20.0),
-        )?;
+        );
+        log::info!("✓ 操作説明テキスト描画: {:?}", result);
 
+        log::info!("🏁 render_main_menu: 描画処理完了");
         Ok(())
     }
 

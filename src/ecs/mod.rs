@@ -41,6 +41,16 @@ pub struct World {
     processor: SystemProcessor,
 }
 
+// Worldのクローン実装
+impl Clone for World {
+    fn clone(&self) -> Self {
+        log::info!("Worldをクローンします");
+        World {
+            processor: self.processor.clone(),
+        }
+    }
+}
+
 impl World {
     /// 新しいゲーム世界を作成
     pub fn new() -> Self {
