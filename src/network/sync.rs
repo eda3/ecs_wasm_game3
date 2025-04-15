@@ -337,7 +337,7 @@ impl System for SyncSystem {
         SystemPriority::new(200) // 通信は優先度高め
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let elapsed = now - self.last_update;
         self.last_update = now;

@@ -746,9 +746,9 @@ impl System for InputSystem {
         SystemPriority::new(0) // 入力処理は優先度0（最優先）
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         // 入力状態を更新
-        self.state.update(delta_time);
+        self.state.update(_delta_time);
         
         // 入力コンポーネントを持つエンティティを取得
         let mut query = Query::<InputComponent>::new();
