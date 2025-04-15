@@ -21,44 +21,16 @@ use crate::ecs::Resource;
 
 /// レンダリングシステムを初期化
 pub fn init_rendering_system(world: &mut crate::ecs::World, canvas_id: &str) -> Result<(), JsValue> {
-    log::warn!("🖌️ レンダリングシステム初期化開始: canvas_id = {}", canvas_id);
-    
-    // 直接キャンバスをテスト
-    let window = web_sys::window().ok_or_else(|| JsValue::from_str("window not available"))?;
-    let document = window.document().ok_or_else(|| JsValue::from_str("document not available"))?;
-    let canvas = document
-        .get_element_by_id(canvas_id)
-        .ok_or_else(|| JsValue::from_str("canvas not found"))?
-        .dyn_into::<web_sys::HtmlCanvasElement>()?;
-        
-    log::warn!("✅ レンダリング初期化: キャンバス取得成功 {}x{}", canvas.width(), canvas.height());
-    
-    let ctx = canvas
-        .get_context("2d")?
-        .ok_or_else(|| JsValue::from_str("Failed to get 2d context"))?
-        .dyn_into::<web_sys::CanvasRenderingContext2d>()?;
-        
-    // テスト描画
-    ctx.set_fill_style_str("#00FFCC");
-    ctx.fill_rect(200.0, 200.0, 100.0, 100.0);
-    log::warn!("💚 レンダリング初期化内: テスト四角を描画");
-    
     // レンダラーの初期化
-    match Renderer::new(canvas_id) {
-        Ok(renderer) => {
-            log::warn!("✅ Renderer初期化成功！");
-            
-            // レンダリングリソースをワールドに追加
-            world.insert_resource(renderer);
-            log::warn!("✅ Rendererをワールドに登録完了");
-            
-            Ok(())
-        },
-        Err(e) => {
-            log::error!("❌ Renderer初期化失敗: {:?}", e);
-            Err(e)
-        }
-    }
+    let renderer = Renderer::new(canvas_id)?;
+    
+    // レンダリングリソースをワールドに追加
+    world.insert_resource(renderer);
+    
+    // TODO: 必要に応じてレンダリングシステムを登録
+    // world.register_system(RenderingSystem::new());
+    
+    Ok(())
 }
 
 /// レンダラー構造体

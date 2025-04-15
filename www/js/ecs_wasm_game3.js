@@ -226,6 +226,18 @@ export function initialize_game(canvas_id) {
     return GameInstance.__wrap(ret[0]);
 }
 
+/**
+ * マウス位置を更新
+ * @param {number} x
+ * @param {number} y
+ */
+export function update_mouse_position(x, y) {
+    const ret = wasm.update_mouse_position(x, y);
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
 function __wbg_adapter_30(arg0, arg1, arg2) {
     wasm.closure2_externref_shim(arg0, arg1, arg2);
 }

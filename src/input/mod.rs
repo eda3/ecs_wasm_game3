@@ -842,6 +842,17 @@ impl InputResource {
     pub fn update(&mut self, delta_time: f32) {
         self.state.update(delta_time);
     }
+    
+    /// マウス位置を設定
+    pub fn set_mouse_position(&mut self, x: f32, y: f32) {
+        // delta_timeは小さな値を使用（実際の時間は不明なため）
+        self.state.update_mouse_position(x, y, 0.016);
+    }
+    
+    /// マウス位置を取得
+    pub fn get_mouse_position(&self) -> (f32, f32) {
+        self.state.mouse_position
+    }
 }
 
 #[cfg(test)]
