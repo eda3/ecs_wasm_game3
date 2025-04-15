@@ -375,9 +375,9 @@ impl System for NetworkCompressionSystem {
         "NetworkCompressionSystem"
     }
     
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, _world: &mut World, resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         // 現在の時間を取得
-        let current_time = js_sys::Date::now();
+        let _current_time = js_sys::Date::now();
         
         // 処理すべきエンティティがあればここで圧縮処理を実行
         // 実際の実装では、このシステムは他のネットワークシステムと連携して動作します

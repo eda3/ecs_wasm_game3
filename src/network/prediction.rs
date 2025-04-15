@@ -852,7 +852,7 @@ impl System for InterpolationSystem {
         SystemPriority::new(10) // 適切な優先度を設定
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let _elapsed = now - self.last_update;
         self.last_update = now;
@@ -913,17 +913,18 @@ impl System for EntitySyncSystem {
         SystemPriority::new(20) // InterpolationSystemより高い優先度
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         self.last_update = now;
         
-        // 同期対象エンティティのクエリ - mutキーワードを追加して修正
+        // リモートエンティティのクエリ - query_tupleを使用して修正
         let mut base_query = world.query_tuple::<NetworkComponent>();
-        let query = base_query.filter(|_, network| network.is_synced);
+        let query = base_query.filter(|_, network| network.is_synced && network.is_remote);
             
-        for (entity, _) in query.iter(world) {
-            // エンティティの状態をスナップショットとして保存
-            // 定期的にスナップショットをクライアントに送信
+        for (entity, _network) in query.iter(world) {
+            // このエンティティの過去のスナップショットを取得
+            // 補間時間（現在時刻 - バッファ時間）に基づいて、適切なスナップショットを選択
+            // 選択したスナップショット間で線形補間を行い、滑らかな動きを実現
         }
 
         Ok(())
