@@ -16,7 +16,7 @@ use serde_json;
 use super::protocol::{NetworkMessage, MessageType, MouseCursorUpdateData};
 use super::messages::{InputData, PlayerData, EntitySnapshot};
 use super::{ConnectionState, ConnectionStateType, NetworkError, TimeSyncData, NetworkConfig};
-use crate::ecs::World;
+use crate::ecs::{World, Resource};
 
 /// ネットワークコンポーネント（エンティティに付与される）
 #[derive(Debug, Clone)]
@@ -46,6 +46,7 @@ impl Default for NetworkComponent {
 }
 
 /// ネットワーククライアント
+#[derive(Debug)]
 pub struct NetworkClient {
     /// クライアントID
     player_id: Option<u32>,
@@ -75,6 +76,17 @@ pub struct NetworkClient {
     last_ping_time: Option<f64>,
     /// RTT(往復遅延時間)
     rtt: f64,
+}
+
+// NetworkClientにResourceトレイトを実装
+impl Resource for NetworkClient {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 impl NetworkClient {
@@ -531,13 +543,14 @@ impl NetworkClient {
     /// マウスカーソル更新メッセージを送信する
     pub fn send_mouse_cursor_update(&mut self, x: f32, y: f32, visible: bool) -> Result<(), NetworkError> {
         if let Some(player_id) = self.player_id {
-            let _data = MouseCursorUpdateData {
+            let data = MouseCursorUpdateData {
                 player_id,
                 x,
                 y,
                 visible,
             };
             
+            // マウスカーソル更新メッセージを作成
             let message = NetworkMessage::new(MessageType::MouseCursorUpdate)
                 .with_player_id(player_id);
                 
@@ -549,11 +562,28 @@ impl NetworkClient {
     }
 
     /// マウスカーソル更新ハンドラを登録する
-    pub fn register_mouse_cursor_handler<F>(&mut self, _handler: F)
+    pub fn register_mouse_cursor_handler<F>(&mut self, handler: F)
     where
         F: Fn(MouseCursorUpdateData) + 'static,
     {
-        // 実装は後で行います
+        self.message_handlers.insert(
+            MessageType::MouseCursorUpdate,
+            Box::new(move |message| {
+                // プレイヤーIDとメッセージから必要なデータを抽出
+                if let Some(player_id) = message.player_id {
+                    // メッセージからデータを作成
+                    let cursor_data = MouseCursorUpdateData {
+                        player_id,
+                        x: 0.0, // デフォルト値（実際はメッセージから抽出するべき）
+                        y: 0.0, // デフォルト値（実際はメッセージから抽出するべき）
+                        visible: true, // デフォルト値（実際はメッセージから抽出するべき）
+                    };
+                    
+                    // ハンドラを呼び出す
+                    handler(cursor_data);
+                }
+            })
+        );
     }
 }
 

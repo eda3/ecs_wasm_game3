@@ -92,6 +92,9 @@ impl GameInstance {
         // ゲームシステムの初期化
         game::init_game_systems(&mut world);
         
+        // マウスカーソルシステムの初期化
+        game::cursor::init_mouse_cursor_system(&mut world)?;
+        
         // インスタンスIDを生成
         let instance_id = format!("game_{}", js_sys::Date::now());
         

@@ -11,6 +11,7 @@ pub mod resources;  // ゲームリソース管理
 pub mod state;     // ゲーム状態管理
 pub mod systems;   // ゲーム固有のシステム
 pub mod entities;  // ゲーム固有のエンティティ
+pub mod cursor;    // マウスカーソル機能
 
 /// ゲームインスタンス
 ///
