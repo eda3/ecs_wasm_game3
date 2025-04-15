@@ -524,16 +524,16 @@ impl GameState {
     }
 
     // 各状態のマウス入力処理
-    fn handle_splash_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
+    fn handle_splash_mouse(&mut self, _x: f32, _y: f32, _button: u8) -> Result<(), JsValue> {
         // スプラッシュ画面でのクリックはメインメニューへ移行
         web_sys::console::log_1(&"スプラッシュ画面をクリック: メインメニューへ遷移します".into());
         self.current_state = GameStateType::MainMenu;
         Ok(())
     }
 
-    fn handle_main_menu_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
+    fn handle_main_menu_mouse(&mut self, _x: f32, y: f32, _button: u8) -> Result<(), JsValue> {
         // メインメニューでのクリック位置に応じてアクション
-        let canvas_height = self.canvas.height() as f32;
+        let _canvas_height = self.canvas.height() as f32;
         
         // メニューオプションの領域を定義
         if y >= 180.0 && y <= 220.0 {
@@ -556,7 +556,7 @@ impl GameState {
         Ok(())
     }
 
-    fn handle_playing_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
+    fn handle_playing_mouse(&mut self, _x: f32, _y: f32, button: u8) -> Result<(), JsValue> {
         // ゲームプレイ中のマウス入力処理
         // 右クリックでポーズメニューを表示
         if button == 2 {
@@ -566,7 +566,7 @@ impl GameState {
         Ok(())
     }
 
-    fn handle_paused_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
+    fn handle_paused_mouse(&mut self, _x: f32, _y: f32, _button: u8) -> Result<(), JsValue> {
         // ポーズ中のマウス入力処理
         // クリックでゲームに戻る
         web_sys::console::log_1(&"ポーズ画面をクリック: ゲームを再開します".into());
@@ -574,7 +574,7 @@ impl GameState {
         Ok(())
     }
 
-    fn handle_game_over_mouse(&mut self, x: f32, y: f32, button: u8) -> Result<(), JsValue> {
+    fn handle_game_over_mouse(&mut self, _x: f32, y: f32, _button: u8) -> Result<(), JsValue> {
         // ゲームオーバー画面のマウス入力処理
         let canvas_height = self.canvas.height() as f32;
         
