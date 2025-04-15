@@ -336,7 +336,7 @@ impl System for SyncSystem {
         SystemPriority::new(200) // 通信は優先度高め
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let elapsed = now - self.last_update;
         self.last_update = now;
@@ -443,7 +443,7 @@ impl System for SyncSystem {
                 let bytes_sent = self.send_entity_sync(delta_snapshot);
                 
                 if self.config.debug_mode {
-                    web_sys::console::log_1(&format!("エンティティ {:?} を同期: {}バイト", entity, bytes_sent).into());
+                    let _ = web_sys::console::log_1(&format!("エンティティ {:?} を同期: {}バイト", entity, bytes_sent).into());
                 }
             }
         }
