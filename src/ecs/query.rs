@@ -87,7 +87,7 @@ where
     }
     
     /// クエリを実行し、条件に合うエンティティをリストに収集
-    pub fn run(&mut self, world: &World) -> Result<(), JsValue> {
+    pub fn run(&mut self, _world: &World) -> Result<(), JsValue> {
         // 実装は今後拡張
         Ok(())
     }
@@ -219,7 +219,7 @@ where
     F: component::Component,
 {
     /// With フィルタを使用してクエリを実行
-    pub fn run_with_filter(&mut self, world: &World) -> Result<(), JsValue> {
+    pub fn run_with_filter(&mut self, _world: &World) -> Result<(), JsValue> {
         // Fコンポーネントを持つエンティティのみをフィルタリング
         self.entities.clear();
         
@@ -237,7 +237,7 @@ where
     T: 'static + component::Component,
 {
     /// Changed フィルタを使用してクエリを実行
-    pub fn run_changed(&mut self, world: &World) -> Result<(), JsValue> {
+    pub fn run_changed(&mut self, _world: &World) -> Result<(), JsValue> {
         // このフレームで変更されたTコンポーネントを持つエンティティのみをフィルタリング
         self.entities.clear();
         

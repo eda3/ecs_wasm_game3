@@ -94,7 +94,7 @@ impl System for RenderingSystem {
         SystemPriority::new(0)
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, _world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // TODO: レンダリング処理の実装
 
         Ok(())
@@ -119,7 +119,7 @@ impl System for PhysicsSystem {
         SystemPriority::new(1)
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, _world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // TODO: 物理演算の実装
 
         Ok(())
@@ -144,7 +144,7 @@ impl System for AnimationSystem {
         SystemPriority::new(2)
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, _world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // TODO: アニメーション処理の実装
 
         Ok(())
@@ -169,7 +169,7 @@ impl System for SoundSystem {
         SystemPriority::new(3)
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, _world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // TODO: サウンド処理の実装
 
         Ok(())
@@ -201,7 +201,7 @@ impl System for GameStateSystem {
         SystemPriority::new(4)
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, _world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // TODO: ゲーム状態管理の実装
 
         Ok(())
