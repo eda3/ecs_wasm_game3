@@ -150,21 +150,21 @@ impl Renderer {
             self.context.save();
             
             // 位置設定
-            self.context.translate(screen_x, screen_y);
+            let _ = self.context.translate(screen_x, screen_y);
             
             // 回転設定
             if sprite.rotation != 0.0 {
-                self.context.rotate(sprite.rotation);
+                let _ = self.context.rotate(sprite.rotation);
             }
             
             // スケール設定
             if sprite.scale_x != 1.0 || sprite.scale_y != 1.0 {
-                self.context.scale(sprite.scale_x, sprite.scale_y);
+                let _ = self.context.scale(sprite.scale_x, sprite.scale_y);
             }
             
             // 反転設定
             if sprite.flip_x || sprite.flip_y {
-                self.context.scale(
+                let _ = self.context.scale(
                     if sprite.flip_x { -1.0 } else { 1.0 },
                     if sprite.flip_y { -1.0 } else { 1.0 }
                 );
