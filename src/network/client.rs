@@ -64,9 +64,9 @@ pub struct NetworkClient {
     /// 時間同期データ
     time_sync_data: TimeSyncData,
     /// エンティティスナップショットキャッシュ
-    entity_snapshots: HashMap<u32, Vec<EntitySnapshot>>,
+    _entity_snapshots: HashMap<u32, Vec<EntitySnapshot>>,
     /// 他プレイヤーのプレイヤーデータ
-    players: HashMap<u32, PlayerData>,
+    _players: HashMap<u32, PlayerData>,
     /// ネットワーク設定
     config: NetworkConfig,
     /// エラーメッセージ
@@ -93,8 +93,8 @@ impl NetworkClient {
             sequence_number: 0,
             rtt: 0.0,
             time_sync_data: TimeSyncData::default(),
-            entity_snapshots: HashMap::new(),
-            players: HashMap::new(),
+            _entity_snapshots: HashMap::new(),
+            _players: HashMap::new(),
             config,
             last_error: None,
             connected_at: None,
