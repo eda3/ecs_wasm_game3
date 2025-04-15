@@ -809,7 +809,7 @@ impl NetworkSendQueue {
 /// 他プレイヤーのエンティティを滑らかに補間表示するためのシステム
 pub struct InterpolationSystem {
     /// 補間バッファの時間（ミリ秒）
-    buffer_time: f64,
+    _buffer_time: f64,
     /// 最後の更新時刻
     last_update: f64,
 }
@@ -817,7 +817,7 @@ pub struct InterpolationSystem {
 impl Default for InterpolationSystem {
     fn default() -> Self {
         Self {
-            buffer_time: 100.0, // 100ms
+            _buffer_time: 100.0, // 100ms
             last_update: Date::now(),
         }
     }
@@ -859,7 +859,7 @@ impl InterpolationSystem {
     /// 新しい補間システムを作成
     pub fn new(buffer_time: f64) -> Self {
         Self {
-            buffer_time,
+            _buffer_time: buffer_time,
             last_update: Date::now(),
         }
     }
