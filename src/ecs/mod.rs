@@ -298,11 +298,11 @@ impl World {
 }
 
 // TypeIdから型名を取得するための拡張トレイト
-trait TypeIdExt {
+trait _TypeIdExt {
     fn type_name(&self) -> &'static str;
 }
 
-impl TypeIdExt for std::any::TypeId {
+impl _TypeIdExt for std::any::TypeId {
     fn type_name(&self) -> &'static str {
         std::any::type_name::<Self>()
     }
