@@ -2,7 +2,6 @@
 //! 
 //! このモジュールには、ゲーム内で使用される時間関連のユーティリティ関数や構造体が含まれています。
 
-use std::time::{Duration, Instant};
 use wasm_bindgen::prelude::*;
 use web_sys::window;
 

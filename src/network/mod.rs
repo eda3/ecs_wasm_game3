@@ -25,14 +25,10 @@ pub use compression_system::NetworkCompressionSystem;
 pub use network_status::*;
 
 // 外部クレートのインポート
-use wasm_bindgen::prelude::*;
-use web_sys::{console, WebSocket, MessageEvent};
-use js_sys::Date;
 use std::collections::HashMap;
-use std::collections::VecDeque;
 
 // 内部モジュールのインポート
-use crate::ecs::{World, Entity, Component, System, Resource};
+use crate::ecs::{Entity, Component, Resource};
 
 // モジュール全体で共有する定数
 /// ネットワーク更新の最大頻度（FPS）

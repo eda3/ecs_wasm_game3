@@ -6,7 +6,6 @@
 use std::marker::PhantomData;
 use wasm_bindgen::JsValue;
 use crate::ecs::{Component, Entity, World};
-use std::any::TypeId;
 use crate::ecs::component;
 
 /// コンポーネントの変更を検出するフィルタ

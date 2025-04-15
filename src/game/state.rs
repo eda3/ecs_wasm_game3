@@ -283,7 +283,7 @@ impl GameState {
         let result = self.context.fill_text(
             "Use keyboard (1-4) or mouse to select",
             (self.canvas.width() / 2) as f64,
-            (self.canvas.height() as f64 - 20.0),
+            self.canvas.height() as f64 - 20.0,
         );
         log::info!("✓ 操作説明テキスト描画: {:?}", result);
 
@@ -377,7 +377,7 @@ impl GameState {
         self.context.fill_text(
             "Press ESC or click to resume",
             (self.canvas.width() / 2) as f64,
-            ((self.canvas.height() as f64) / 2.0 + 50.0),
+            (self.canvas.height() as f64) / 2.0 + 50.0,
         )?;
 
         Ok(())
@@ -424,7 +424,7 @@ impl GameState {
         self.context.fill_text(
             "Press R to retry or M for main menu",
             (self.canvas.width() / 2) as f64,
-            ((self.canvas.height() as f64) / 3.0 * 2.0),
+            (self.canvas.height() as f64) / 3.0 * 2.0,
         )?;
 
         Ok(())

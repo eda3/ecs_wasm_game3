@@ -34,7 +34,7 @@ impl System for TimeSystem {
 
     fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         // 時間リソースを取得または作成
-        let mut time = world
+        let time = world
             .get_resource_mut::<TimeResource>()
             .ok_or_else(|| JsValue::from_str("Time resource not found"))?;
 

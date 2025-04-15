@@ -3,16 +3,15 @@
 //! このモジュールは、エンティティの状態をネットワーク上で同期するための
 //! システムを実装します。変更検出と差分同期に重点を置いています。
 
-use std::collections::{HashMap, HashSet};
-use std::rc::Rc;
+use std::collections::HashMap;
 use js_sys::Date;
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::JsValue;
-use crate::ecs::{World, Entity, Component, System, Query, Changed, With, Resource};
+use crate::ecs::{World, Entity, Component, System, Resource};
 use crate::ecs::{SystemPriority, ResourceManager};
 use crate::ecs::system::SystemPhase;
 
-use super::messages::{EntitySnapshot as MessagesEntitySnapshot, ComponentData};
+use super::messages::ComponentData;
 use super::client::NetworkComponent;
 use super::protocol::{NetworkMessage, MessageType};
 
@@ -753,7 +752,7 @@ pub trait MessageCompressor: Send + Sync {
 impl MessageCompressor for DefaultMessageCompressor {
     fn compress(&self, snapshot: &LocalEntitySnapshot) -> LocalEntitySnapshot {
         // 実装されたcompressメソッド
-        let mut compressed = snapshot.clone();
+        let compressed = snapshot.clone();
         // 圧縮処理を行う
         // ...
         compressed

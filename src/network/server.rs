@@ -4,13 +4,12 @@
 //! ただし、WebAssemblyコンテキストでは主にスタブとして機能し、実際のサーバーは別プロセスで実行されます。
 
 use std::collections::{HashMap, VecDeque};
-use wasm_bindgen::prelude::*;
 use js_sys::Date;
 
 use super::protocol::{NetworkMessage, MessageType};
-use super::messages::{InputData, PlayerData, EntitySnapshot, ComponentData};
+use super::messages::{PlayerData, ComponentData};
 use super::{ConnectionState, NetworkError, NetworkConfig};
-use crate::ecs::{World, Entity, Component, System, Resource};
+use crate::ecs::World;
 
 /// サーバー接続クライアント情報
 #[derive(Debug, Clone)]

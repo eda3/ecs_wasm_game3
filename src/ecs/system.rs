@@ -1,8 +1,6 @@
-use std::any::{Any, TypeId};
 use std::collections::HashMap;
-use std::fmt;
 
-use super::entity::{Entity, EntityId};
+use super::entity::Entity;
 use super::component::{Component, ComponentManager};
 use super::resource::{Resource, ResourceManager};
 use wasm_bindgen::JsValue;

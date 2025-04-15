@@ -3,20 +3,15 @@
 //! このモジュールは、エンティティスナップショットに対して圧縮アルゴリズムを適用し、
 //! ネットワーク帯域幅を節約するためのシステムを実装します。
 
-use crate::ecs::{System, World, Resource, Entity, ResourceManager};
+use crate::ecs::{System, World, Resource, ResourceManager};
 use crate::ecs::SystemPriority;
 use super::sync::MessageCompressor;
 use super::messages::EntitySnapshot;
 use super::sync::DefaultMessageCompressor;
-use super::NetworkResource;
-use super::client::NetworkClient;
-use super::protocol::{MessageType, NetworkMessage};
-use js_sys::Date;
 use wasm_bindgen::JsValue;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use serde::{Serialize, Deserialize};
-use std::collections::VecDeque;
 
 /// ネットワークメッセージの圧縮を処理するシステム
 pub struct NetworkCompressionSystem {

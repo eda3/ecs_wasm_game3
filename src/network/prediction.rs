@@ -5,8 +5,6 @@
 
 use std::collections::{HashMap, VecDeque};
 use js_sys::Date;
-use std::rc::Rc;
-use std::cell::RefCell;
 use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use wasm_bindgen::JsValue;
@@ -16,7 +14,7 @@ use super::client::NetworkComponent;
 use super::network_status::{NetworkStatus, BandwidthStatus};
 use super::sync::{PositionComponent, VelocityComponent};
 use super::NetworkResource;
-use crate::ecs::{World, Entity, Component, System, Query, With, Changed, ResourceManager, Resource};
+use crate::ecs::{World, Entity, Component, System, ResourceManager, Resource};
 use crate::ecs::system::{SystemPhase, SystemPriority};
 
 /// クライアント予測データ
@@ -356,7 +354,7 @@ impl ServerReconciliation {
     
     /// クライアント所有のエンティティを取得
     fn get_client_owned_entities(&self, world: &World) -> Vec<(u32, Entity)> {
-        let mut owned_entities = Vec::new();
+        let owned_entities = Vec::new();
         
         // ECSクエリ機能を使用して、NetworkComponentを持つエンティティを検索
         // let entities = world.query_entities::<NetworkComponent>();
@@ -1286,7 +1284,7 @@ impl InputLatencyCompensationSystem {
         // 入力処理コンポーネントを取得
         let input_processor = world.get_component_mut::<InputProcessor>(entity);
         
-        if let Some(mut processor) = input_processor {
+        if let Some(processor) = input_processor {
             // 補正された入力を処理
             processor.process_input(&input, delta_time);
         }

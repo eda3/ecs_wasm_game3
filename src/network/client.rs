@@ -6,16 +6,16 @@
 use wasm_bindgen::prelude::*;
 use wasm_bindgen::JsCast;
 use web_sys::{WebSocket, MessageEvent, ErrorEvent, CloseEvent, Event};
-use js_sys::{Function, Date, Array, JSON};
+use js_sys::Date;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::cell::RefCell;
 use log;
 
 use super::protocol::{NetworkMessage, MessageType};
-use super::messages::{InputData, PlayerData, EntitySnapshot, ComponentData};
+use super::messages::{InputData, PlayerData, EntitySnapshot};
 use super::{ConnectionState, NetworkError, TimeSyncData, NetworkConfig};
-use crate::ecs::{World, Entity, Component, Resource};
+use crate::ecs::World;
 
 /// ネットワークコンポーネント（エンティティに付与される）
 #[derive(Debug, Clone)]

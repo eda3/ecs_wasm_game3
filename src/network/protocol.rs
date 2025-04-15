@@ -8,7 +8,6 @@ use std::collections::HashMap;
 use js_sys::{Date, JSON};
 use wasm_bindgen::prelude::*;
 use super::messages::{InputData, PlayerData, ComponentData};
-use crate::ecs::Entity;
 
 /// メッセージ種別を表す列挙型
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

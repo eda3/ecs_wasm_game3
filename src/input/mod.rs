@@ -5,9 +5,6 @@
 //! 複雑な入力処理（キーリピート、ジェスチャー検出など）も提供します。
 
 use std::collections::{HashMap, HashSet};
-use wasm_bindgen::prelude::*;
-use web_sys::KeyboardEvent as WebKeyboardEvent;
-use web_sys::console;
 use js_sys::Date;
 use wasm_bindgen::JsValue;
 

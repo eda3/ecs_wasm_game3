@@ -3,7 +3,6 @@ use web_sys::console;
 use std::rc::{Rc, Weak};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::OnceLock;
 
 // モジュール宣言
 pub mod ecs;

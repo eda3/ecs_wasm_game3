@@ -4,7 +4,6 @@
 //! タップ、スワイプ、ピンチ、回転などのジェスチャーを検出します。
 
 // Instantの代わりにjs_sys::Dateを使用（WebAssemblyで動作するため）
-use js_sys::Date;
 
 /// ジェスチャータイプの列挙型
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
