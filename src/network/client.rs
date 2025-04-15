@@ -435,10 +435,6 @@ impl NetworkClient {
                         // Connectメッセージは通常クライアントからサーバーに送信されるもの
                         web_sys::console::warn_1(&"サーバーからConnectメッセージを受信（異常）".into());
                     }
-                    _ => {
-                        // 未知のメッセージタイプ
-                        web_sys::console::warn_1(&format!("未知のメッセージタイプ: {:?}", message.message_type).into());
-                    }
                 }
             }
         }
