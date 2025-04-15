@@ -576,7 +576,7 @@ impl InputState {
     }
     
     /// 入力状態を更新（フレーム毎に呼び出す）
-    pub fn update(&mut self, delta_time: f32) {
+    pub fn update(&mut self, _delta_time: f32) {
         // ジェスチャー検出
         self.gesture_detector.detect_gestures(&self.touch_points, &self.touch_points_previous);
         
@@ -746,7 +746,7 @@ impl System for InputSystem {
         SystemPriority::new(0) // 入力処理は優先度0（最優先）
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         // 入力状態を更新
         self.state.update(_delta_time);
         
