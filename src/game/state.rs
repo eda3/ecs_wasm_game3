@@ -160,27 +160,27 @@ impl GameState {
     }
 
     // 各状態の更新処理
-    fn update_splash(&mut self, delta_time: f32) -> Result<(), JsValue> {
+    fn update_splash(&mut self, _delta_time: f32) -> Result<(), JsValue> {
         // TODO: スプラッシュ画面の更新処理
         Ok(())
     }
 
-    fn update_main_menu(&mut self, delta_time: f32) -> Result<(), JsValue> {
+    fn update_main_menu(&mut self, _delta_time: f32) -> Result<(), JsValue> {
         // TODO: メインメニューの更新処理
         Ok(())
     }
 
-    fn update_playing(&mut self, delta_time: f32) -> Result<(), JsValue> {
+    fn update_playing(&mut self, _delta_time: f32) -> Result<(), JsValue> {
         // TODO: ゲームプレイ中の更新処理
         Ok(())
     }
 
-    fn update_paused(&mut self, delta_time: f32) -> Result<(), JsValue> {
+    fn update_paused(&mut self, _delta_time: f32) -> Result<(), JsValue> {
         // TODO: ポーズ中の更新処理
         Ok(())
     }
 
-    fn update_game_over(&mut self, delta_time: f32) -> Result<(), JsValue> {
+    fn update_game_over(&mut self, _delta_time: f32) -> Result<(), JsValue> {
         // TODO: ゲームオーバーの更新処理
         Ok(())
     }
