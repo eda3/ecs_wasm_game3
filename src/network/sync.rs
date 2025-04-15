@@ -225,7 +225,7 @@ impl SyncSystem {
     }
     
     /// コンポーネントが同期対象かチェック
-    fn should_sync_component(&self, component_name: &str, last_sync_time: f64, now: f64) -> bool {
+    fn _should_sync_component(&self, component_name: &str, last_sync_time: f64, now: f64) -> bool {
         let config = match self.config.component_configs.get(component_name) {
             Some(config) => config,
             None => return false, // 設定がない場合は同期しない

@@ -263,7 +263,7 @@ impl NetworkMessage {
                 js_sys::Reflect::set(&player_obj, &"team".into(), &team.into())?;
             }
             
-            if let Some(ref settings) = player.settings {
+            if let Some(ref _settings) = player.settings {
                 let settings_obj = js_sys::Object::new();
                 // 設定データの処理
                 js_sys::Reflect::set(&player_obj, &"settings".into(), &settings_obj)?;

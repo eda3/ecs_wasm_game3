@@ -62,7 +62,7 @@ impl Entity {
 /// エンティティの生成と削除を管理する構造体
 pub struct EntityManager {
     active_entities: HashSet<Entity>,
-    next_generation: u32,
+    _next_generation: u32,
 }
 
 impl EntityManager {
@@ -70,7 +70,7 @@ impl EntityManager {
     pub fn new() -> Self {
         Self {
             active_entities: HashSet::new(),
-            next_generation: 0,
+            _next_generation: 0,
         }
     }
 

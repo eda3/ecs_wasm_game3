@@ -304,7 +304,7 @@ impl NetworkCompressionSystem {
     }
     
     /// 帯域幅使用状況に基づいて圧縮レベルを自動調整
-    fn adapt_compression_level(&mut self) {
+    fn _adapt_compression_level(&mut self) {
         // 帯域幅の閾値 (バイト/秒)
         const LOW_BANDWIDTH_THRESHOLD: f32 = 5_000.0;    // 5 KB/s
         const MEDIUM_BANDWIDTH_THRESHOLD: f32 = 20_000.0; // 20 KB/s
@@ -336,7 +336,7 @@ impl NetworkCompressionSystem {
     }
 
     /// 10秒以上経過したデータを削除
-    fn cleanup_old_data(&mut self) {
+    fn _cleanup_old_data(&mut self) {
         let now = Instant::now();
         let cutoff = now - Duration::from_secs(10);
         

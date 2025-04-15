@@ -755,7 +755,7 @@ impl System for InputSystem {
         // 実行するアクションを一時的に保存する構造
         struct ActionToExecute {
             entity: Entity,
-            action: String,
+            _action: String,
             handler: ActionHandler,
             value: f32,
         }
@@ -774,7 +774,7 @@ impl System for InputSystem {
                         let value = self.state.action_mapping.get_action_value(action);
                         actions_to_execute.push(ActionToExecute {
                             entity,
-                            action: action.clone(),
+                            _action: action.clone(),
                             handler: *handler,
                             value,
                         });

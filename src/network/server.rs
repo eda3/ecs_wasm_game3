@@ -281,7 +281,7 @@ impl NetworkServer {
     }
 
     /// 受信メッセージの処理
-    fn process_messages(&mut self, world: &mut World) {
+    fn process_messages(&mut self, _world: &mut World) {
         while let Some((client_id, message)) = self.message_queue.pop_front() {
             // クライアントが存在するか確認
             if !self.clients.contains_key(&client_id) {
