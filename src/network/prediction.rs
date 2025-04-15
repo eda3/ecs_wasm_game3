@@ -1486,10 +1486,12 @@ pub enum MessageType {
 // ネットワークメッセージの構造体を追加
 #[derive(Debug, Clone)]
 pub struct NetworkMessage {
+    #[allow(dead_code)]
     message_type: MessageType,
     sequence: Option<u32>,
     entity_id: Option<u32>,
     components: Option<HashMap<String, ComponentData>>,
+    #[allow(dead_code)]
     timestamp: f64,
 }
 

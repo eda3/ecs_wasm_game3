@@ -33,11 +33,12 @@ pub struct BandwidthUsage {
     /// 最近10秒間の受信データ量（バイト）
     recent_bytes_received: Vec<(Instant, usize)>,
     /// 直近のピーク帯域幅（バイト/秒）
-    peak_bandwidth: f32,
+    #[allow(dead_code)]
+    pub peak_bandwidth: f32,
     /// 利用可能な帯域幅の見積もり（バイト/秒）
-    estimated_available_bandwidth: f32,
+    pub estimated_available_bandwidth: f32,
     /// 帯域幅の利用目標（0.0〜1.0）
-    target_usage_ratio: f32,
+    pub target_usage_ratio: f32,
 }
 
 /// エンティティ更新の優先度
