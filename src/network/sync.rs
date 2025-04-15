@@ -338,7 +338,7 @@ impl System for SyncSystem {
 
     fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
-        let elapsed = now - self.last_update;
+        let _elapsed = now - self.last_update;
         self.last_update = now;
         
         // 今回のフレームでの帯域制限チェック
@@ -603,15 +603,15 @@ impl DefaultMessageCompressor {
         let mut size = 8; // ベースサイズ（entity_id + timestamp）
         
         // 各フィールドのサイズを加算
-        if let Some(position) = &snapshot.position {
+        if let Some(_position) = &snapshot.position {
             size += std::mem::size_of::<[f32; 3]>();
         }
         
-        if let Some(rotation) = &snapshot.rotation {
+        if let Some(_rotation) = &snapshot.rotation {
             size += std::mem::size_of::<[f32; 4]>();
         }
         
-        if let Some(velocity) = &snapshot.velocity {
+        if let Some(_velocity) = &snapshot.velocity {
             size += std::mem::size_of::<[f32; 3]>();
         }
         
@@ -641,7 +641,7 @@ impl DefaultMessageCompressor {
             }
         }
         
-        for component in &snapshot.components {
+        for _component in &snapshot.components {
             size += std::mem::size_of::<ComponentData>();
         }
         
@@ -758,7 +758,7 @@ impl MessageCompressor for DefaultMessageCompressor {
         compressed
     }
     
-    fn estimate_efficiency(&self, snapshot: &LocalEntitySnapshot) -> f32 {
+    fn estimate_efficiency(&self, _snapshot: &LocalEntitySnapshot) -> f32 {
         // 圧縮効率を推定
         // 簡易実装
         0.5
@@ -866,19 +866,17 @@ impl LocalEntitySnapshot {
         // 基本構造の固定サイズ（ID, タイムスタンプ）
         let mut size = 16; 
         
-        // 位置データ (12バイト)
-        if self.position.is_some() {
-            size += 12;
+        // 各フィールドのサイズを加算
+        if let Some(_position) = &self.position {
+            size += std::mem::size_of::<[f32; 3]>();
         }
         
-        // 回転データ (16バイト)
-        if self.rotation.is_some() {
-            size += 16;
+        if let Some(_rotation) = &self.rotation {
+            size += std::mem::size_of::<[f32; 4]>();
         }
         
-        // 速度データ (12バイト)
-        if self.velocity.is_some() {
-            size += 12;
+        if let Some(_velocity) = &self.velocity {
+            size += std::mem::size_of::<[f32; 3]>();
         }
         
         // アニメーション状態 (可変長文字列)

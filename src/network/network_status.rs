@@ -428,7 +428,7 @@ impl System for NetworkStatusMonitor {
         SystemPriority::new(10) // ネットワーク状態は早めに更新
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         
         // ネットワークリソースを取得

@@ -15,7 +15,7 @@ pub struct GameTime {
     /// ゲーム内時間スケール（1.0が通常速度）
     time_scale: f32,
     /// 開始タイムスタンプ（ブラウザのDate.now()値）
-    start_time: f64,
+    _start_time: f64,
     /// 最後の更新タイムスタンプ
     last_update: f64,
     /// 累積フレーム数
@@ -31,7 +31,7 @@ impl GameTime {
             elapsed: 0.0,
             delta: 0.0,
             time_scale: 1.0,
-            start_time: current_time,
+            _start_time: current_time,
             last_update: current_time,
             frame_count: 0,
         }
