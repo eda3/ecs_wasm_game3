@@ -533,7 +533,7 @@ impl GameState {
 
     fn handle_main_menu_mouse(&mut self, _x: f32, _y: f32, _button: u8) -> Result<(), JsValue> {
         // メインメニューでのクリック位置に応じてアクション
-        let canvas_height = self.canvas.height() as f32;
+        let _canvas_height = self.canvas.height() as f32;
         
         // メニューオプションの領域を定義
         if _y >= 180.0 && _y <= 220.0 {
@@ -576,10 +576,10 @@ impl GameState {
 
     fn handle_game_over_mouse(&mut self, _x: f32, _y: f32, _button: u8) -> Result<(), JsValue> {
         // ゲームオーバー画面のマウス入力処理
-        let canvas_height = self.canvas.height() as f32;
+        let _canvas_height = self.canvas.height() as f32;
         
         // 画面上半分をクリックすると再挑戦
-        if _y < canvas_height / 2.0 {
+        if _y < _canvas_height / 2.0 {
             web_sys::console::log_1(&"ゲームオーバー画面上部をクリック: リトライします".into());
             self.current_state = GameStateType::Playing;
         } else {

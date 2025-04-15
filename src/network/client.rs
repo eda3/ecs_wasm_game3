@@ -295,7 +295,7 @@ impl NetworkClient {
     }
 
     /// 更新処理
-    pub fn update(&mut self, world: &mut World) -> Result<(), NetworkError> {
+    pub fn update(&mut self, _world: &mut World) -> Result<(), NetworkError> {
         // 接続状態の確認
         self.check_connection_status();
         
@@ -382,7 +382,7 @@ impl NetworkClient {
                         // コンポーネント更新の処理
                         web_sys::console::log_1(&"コンポーネント更新メッセージを受信".into());
                         if let Some(entity_id) = message.entity_id {
-                            if let Some(components) = &message.components {
+                            if let Some(_components) = &message.components {
                                 web_sys::console::log_1(&format!("エンティティ{}のコンポーネント更新", entity_id).into());
                                 // コンポーネント更新の処理を実装
                             }

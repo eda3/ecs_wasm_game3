@@ -66,7 +66,7 @@ impl System for InputSystem {
 
     fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
         // 入力状態リソースを取得
-        let input = world
+        let _input = world
             .get_resource::<crate::game::resources::InputState>()
             .ok_or_else(|| JsValue::from_str("InputState not found"))?;
 
