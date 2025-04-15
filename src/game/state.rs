@@ -431,7 +431,7 @@ impl GameState {
     }
 
     // 各状態のキー入力処理
-    fn handle_splash_key(&mut self, key_code: u32) -> Result<(), JsValue> {
+    fn handle_splash_key(&mut self, _key_code: u32) -> Result<(), JsValue> {
         // どのキーでもスプラッシュ画面からメインメニューに遷移
         web_sys::console::log_1(&"スプラッシュ画面からメインメニューへ遷移します".into());
         self.current_state = GameStateType::MainMenu;
@@ -531,23 +531,23 @@ impl GameState {
         Ok(())
     }
 
-    fn handle_main_menu_mouse(&mut self, _x: f32, y: f32, _button: u8) -> Result<(), JsValue> {
+    fn handle_main_menu_mouse(&mut self, _x: f32, _y: f32, _button: u8) -> Result<(), JsValue> {
         // メインメニューでのクリック位置に応じてアクション
-        let _canvas_height = self.canvas.height() as f32;
+        let canvas_height = self.canvas.height() as f32;
         
         // メニューオプションの領域を定義
-        if y >= 180.0 && y <= 220.0 {
+        if _y >= 180.0 && _y <= 220.0 {
             // 「新規ゲーム」オプション
             web_sys::console::log_1(&"「新規ゲーム」をクリックしました".into());
             self.current_state = GameStateType::Playing;
-        } else if y >= 230.0 && y <= 270.0 {
+        } else if _y >= 230.0 && _y <= 270.0 {
             // 「マルチプレイヤー」オプション
             web_sys::console::log_1(&"「マルチプレイヤー」をクリックしました".into());
             self.current_state = GameStateType::Playing;
-        } else if y >= 280.0 && y <= 320.0 {
+        } else if _y >= 280.0 && _y <= 320.0 {
             // 「オプション」オプション
             web_sys::console::log_1(&"「オプション」機能は未実装です".into());
-        } else if y >= 330.0 && y <= 370.0 {
+        } else if _y >= 330.0 && _y <= 370.0 {
             // 「終了」オプション
             web_sys::console::log_1(&"「終了」をクリックしました".into());
             self.current_state = GameStateType::Splash;
@@ -556,10 +556,10 @@ impl GameState {
         Ok(())
     }
 
-    fn handle_playing_mouse(&mut self, _x: f32, _y: f32, button: u8) -> Result<(), JsValue> {
+    fn handle_playing_mouse(&mut self, _x: f32, _y: f32, _button: u8) -> Result<(), JsValue> {
         // ゲームプレイ中のマウス入力処理
         // 右クリックでポーズメニューを表示
-        if button == 2 {
+        if _button == 2 {
             web_sys::console::log_1(&"右クリック: ゲームをポーズします".into());
             self.current_state = GameStateType::Paused;
         }
@@ -574,12 +574,12 @@ impl GameState {
         Ok(())
     }
 
-    fn handle_game_over_mouse(&mut self, _x: f32, y: f32, _button: u8) -> Result<(), JsValue> {
+    fn handle_game_over_mouse(&mut self, _x: f32, _y: f32, _button: u8) -> Result<(), JsValue> {
         // ゲームオーバー画面のマウス入力処理
         let canvas_height = self.canvas.height() as f32;
         
         // 画面上半分をクリックすると再挑戦
-        if y < canvas_height / 2.0 {
+        if _y < canvas_height / 2.0 {
             web_sys::console::log_1(&"ゲームオーバー画面上部をクリック: リトライします".into());
             self.current_state = GameStateType::Playing;
         } else {

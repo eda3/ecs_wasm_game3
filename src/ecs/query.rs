@@ -131,7 +131,7 @@ where
     /// 
     /// # 引数
     /// 
-    /// * `filter_fn` - エンティティとコンポーネントを受け取り、条件に合致するかを返す関数
+    /// * `_filter_fn` - エンティティとコンポーネントを受け取り、条件に合致するかを返す関数
     ///
     /// # 戻り値
     ///
@@ -143,7 +143,7 @@ where
     /// let query = world.query::<NetworkComponent>()
     ///     .filter(|_, network| network.is_synced && !network.is_remote);
     /// ```
-    pub fn filter<Fn>(&mut self, filter_fn: Fn) -> &mut Self 
+    pub fn filter<Fn>(&mut self, _filter_fn: Fn) -> &mut Self 
     where
         Fn: FnMut(&Entity, &T) -> bool + 'static,
     {
