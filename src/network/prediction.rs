@@ -83,7 +83,7 @@ impl System for ClientPrediction {
         SystemPriority::new(40) // ServerReconciliationより少し低い優先度
     }
     
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let _elapsed = now - self.last_update;
         self.last_update = now;
@@ -123,7 +123,7 @@ impl ClientPrediction {
     }
     
     /// エンティティの状態を予測
-    fn predict_entity_state(&mut self, world: &mut World, entity: Entity, _prediction_data: &PredictionData, _delta_time: f32) {
+    fn predict_entity_state(&mut self, _world: &mut World, _entity: Entity, _prediction_data: &PredictionData, _delta_time: f32) {
         // 予測計算のロジック実装
         // 実装例: 現在の位置と速度から次のフレームの位置を予測
         // これは実際の物理演算や入力処理を簡略化したもの
@@ -353,26 +353,10 @@ impl ServerReconciliation {
     }
     
     /// クライアント所有のエンティティを取得
-    fn get_client_owned_entities(&self, world: &World) -> Vec<(u32, Entity)> {
-        let owned_entities = Vec::new();
-        
-        // ECSクエリ機能を使用して、NetworkComponentを持つエンティティを検索
-        // let entities = world.query_entities::<NetworkComponent>();
-        
-        // Worldにquery_entitiesメソッドがないため、代替手段を使用
-        // 手動でコンポーネントを持つエンティティを検索
-        // SystemProcessorの内部構造ではなく、直接コンポーネントにアクセスする方法に変更
-        
-        // 注: World構造に直接アクセスする代わりに、
-        // 各エンティティで持っているコンポーネントをチェックする必要があります
-        // この例では、簡略化のために空の結果を返します
-        // TODO: 実際の実装では、エンティティとコンポーネントを適切に検索する必要があります
-        
-        // 仮実装: 実際にはここでエンティティを検索してフィルタリングする必要があります
-        #[cfg(feature = "debug_network")]
-        web_sys::console::log_1(&"client_owned_entities: entity_managerにアクセスできないため代替実装を使用".into());
-        
-        owned_entities
+    fn get_client_owned_entities(&self, _world: &World) -> Vec<(u32, Entity)> {
+        // 実際の実装では、world から NetworkComponent と OwnershipComponent を持つエンティティを取得
+        // ここでは簡略化のためにダミーデータを返す
+        vec![]
     }
     
     /// エンティティの状態をキャプチャ
@@ -793,7 +777,7 @@ impl NetworkSendQueue {
     
     /// キューを処理して実際に送信
     pub fn process_queue(&mut self, network_client: &mut NetworkClient) {
-        for (client_id, entity, snapshot, sequence) in self.queue.drain(..) {
+        for (_client_id, entity, snapshot, sequence) in self.queue.drain(..) {
             // スナップショットメッセージを作成
             let message = NetworkMessage::new(MessageType::ComponentUpdate)
                 .with_sequence(sequence)
@@ -801,11 +785,11 @@ impl NetworkSendQueue {
                 .with_components(snapshot.components);
                 
             // メッセージを送信
-            if let Err(e) = network_client.send_message(message) {
+            if let Err(_e) = network_client.send_message(message) {
                 #[cfg(feature = "debug_network")]
                 web_sys::console::log_1(&format!(
                     "エラー: クライアント {} へのメッセージ送信に失敗: {:?}",
-                    client_id, e
+                    _client_id, _e
                 ).into());
             }
         }
@@ -861,7 +845,7 @@ impl System for InterpolationSystem {
         let mut base_query = world.query_tuple::<NetworkComponent>();
         let query = base_query.filter(|_, network| network.is_synced && network.is_remote);
             
-        for (entity, network) in query.iter(world) {
+        for (_entity, _network) in query.iter(world) {
             // このエンティティの過去のスナップショットを取得
             // 補間時間（現在時刻 - バッファ時間）に基づいて、適切なスナップショットを選択
             // 選択したスナップショット間で線形補間を行い、滑らかな動きを実現
@@ -921,7 +905,7 @@ impl System for EntitySyncSystem {
         let mut base_query = world.query_tuple::<NetworkComponent>();
         let query = base_query.filter(|_, network| network.is_synced && network.is_remote);
             
-        for (entity, _network) in query.iter(world) {
+        for (_entity, _network) in query.iter(world) {
             // このエンティティの過去のスナップショットを取得
             // 補間時間（現在時刻 - バッファ時間）に基づいて、適切なスナップショットを選択
             // 選択したスナップショット間で線形補間を行い、滑らかな動きを実現
@@ -1087,7 +1071,7 @@ impl System for InputLatencyCompensationSystem {
         SystemPriority::new(20) // 中程度の優先度
     }
 
-    fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
+    fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
         let _elapsed = now - self.last_update;
         self.last_update = now;

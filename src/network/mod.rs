@@ -218,7 +218,7 @@ impl NetworkManager {
     }
 
     /// サーバーに接続
-    pub fn connect(&mut self, server_url: &str) -> Result<(), String> {
+    pub fn connect(&mut self, _server_url: &str) -> Result<(), String> {
         self.connection_state = ConnectionState::Connecting;
         // TODO: WebSocket接続の実装
         Ok(())

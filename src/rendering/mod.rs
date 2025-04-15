@@ -172,7 +172,7 @@ impl Renderer {
             
             // 透明度設定
             if sprite.opacity != 1.0 {
-                self.context.set_global_alpha(sprite.opacity);
+                let _ = self.context.set_global_alpha(sprite.opacity);
             }
 
             self.context.draw_image_with_html_image_element_and_sw_and_sh_and_dx_and_dy_and_dw_and_dh(

@@ -265,7 +265,7 @@ impl ComponentManager {
         }
         
         // 一意なエンティティIDをEntityインスタンスに変換
-        entity_set.into_iter().map(|id| {
+        entity_set.into_iter().map(|_id| {
             // EntityIdからEntityインスタンスを再構築
             let entity = Entity::new();
             // これは比較用の仮のEntityインスタンスで、実際の処理では

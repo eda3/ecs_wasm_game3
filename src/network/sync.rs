@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use js_sys::Date;
 use serde::{Serialize, Deserialize};
 use wasm_bindgen::JsValue;
-use crate::ecs::{World, Entity, Component, System, Resource};
+use crate::ecs::{World, Entity, System, Resource};
 use crate::ecs::{SystemPriority, ResourceManager};
 use crate::ecs::system::SystemPhase;
 
@@ -333,11 +333,12 @@ impl System for SyncSystem {
     }
     
     fn priority(&self) -> SystemPriority {
-        SystemPriority::new(200) // 通信は優先度高め
+        SystemPriority::new(0)
     }
 
     fn run(&mut self, world: &mut World, _resources: &mut ResourceManager, _delta_time: f32) -> Result<(), JsValue> {
-        let now = Date::now();
+        // 現在の時刻を取得
+        let now = js_sys::Date::now();
         let _elapsed = now - self.last_update;
         self.last_update = now;
         
