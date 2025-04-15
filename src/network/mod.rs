@@ -25,7 +25,7 @@ pub use compression_system::NetworkCompressionSystem;
 pub use network_status::*;
 
 // 外部クレートのインポート
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 // 内部モジュールのインポート
 use crate::ecs::{Entity, Component, Resource};
@@ -34,9 +34,18 @@ use crate::ecs::{Entity, Component, Resource};
 /// ネットワーク更新の最大頻度（FPS）
 pub const NETWORK_UPDATE_RATE: u32 = 20;
 
-/// 接続状態を表す列挙型
+/// 接続状態とメッセージキューを管理する構造体
+#[derive(Debug, Clone)]
+pub struct ConnectionState {
+    /// 接続状態
+    pub state: ConnectionStateType,
+    /// 保留中のメッセージキュー
+    pending_messages: VecDeque<NetworkMessage>,
+}
+
+/// 接続状態タイプを表す列挙型
 #[derive(Debug, Clone, PartialEq)]
-pub enum ConnectionState {
+pub enum ConnectionStateType {
     /// 切断状態
     Disconnected,
     /// 接続試行中
@@ -47,6 +56,62 @@ pub enum ConnectionState {
     Disconnecting,
     /// エラー発生
     Error(String),
+}
+
+impl ConnectionState {
+    /// 新しい接続状態を作成
+    pub fn new(state: ConnectionStateType) -> Self {
+        Self {
+            state,
+            pending_messages: VecDeque::new(),
+        }
+    }
+
+    /// 切断状態を作成
+    pub fn disconnected() -> Self {
+        Self::new(ConnectionStateType::Disconnected)
+    }
+
+    /// 接続中状態を作成
+    pub fn connecting() -> Self {
+        Self::new(ConnectionStateType::Connecting)
+    }
+
+    /// 接続済み状態を作成
+    pub fn connected() -> Self {
+        Self::new(ConnectionStateType::Connected)
+    }
+
+    /// 状態を設定
+    pub fn set_state(&mut self, state: ConnectionStateType) {
+        self.state = state;
+    }
+
+    /// メッセージをキューに追加
+    pub fn push_back(&mut self, message: NetworkMessage) {
+        self.pending_messages.push_back(message);
+    }
+
+    /// メッセージをキューから取得
+    pub fn pop_front(&mut self) -> Option<NetworkMessage> {
+        self.pending_messages.pop_front()
+    }
+
+    /// キューの長さを取得
+    pub fn len(&self) -> usize {
+        self.pending_messages.len()
+    }
+
+    /// キューが空かどうかを確認
+    pub fn is_empty(&self) -> bool {
+        self.pending_messages.is_empty()
+    }
+}
+
+impl PartialEq for ConnectionState {
+    fn eq(&self, other: &Self) -> bool {
+        self.state == other.state
+    }
 }
 
 /// ネットワークエラーを表す列挙型
@@ -209,7 +274,7 @@ impl NetworkManager {
     /// 新しいネットワークマネージャーを作成
     pub fn new() -> Self {
         Self {
-            connection_state: ConnectionState::Disconnected,
+            connection_state: ConnectionState::disconnected(),
             player_id: None,
             players: HashMap::new(),
             latency: 0.0,
@@ -219,14 +284,14 @@ impl NetworkManager {
 
     /// サーバーに接続
     pub fn connect(&mut self, _server_url: &str) -> Result<(), String> {
-        self.connection_state = ConnectionState::Connecting;
+        self.connection_state.set_state(ConnectionStateType::Connecting);
         // TODO: WebSocket接続の実装
         Ok(())
     }
 
     /// サーバーから切断
     pub fn disconnect(&mut self) {
-        self.connection_state = ConnectionState::Disconnecting;
+        self.connection_state.set_state(ConnectionStateType::Disconnecting);
         // TODO: 切断処理の実装
     }
 
@@ -262,7 +327,7 @@ mod tests {
     #[test]
     fn test_network_manager_creation() {
         let manager = NetworkManager::new();
-        assert_eq!(manager.connection_state, ConnectionState::Disconnected);
+        assert_eq!(manager.connection_state.state, ConnectionStateType::Disconnected);
         assert!(manager.player_id.is_none());
         assert!(manager.players.is_empty());
     }

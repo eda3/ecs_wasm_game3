@@ -193,12 +193,12 @@ impl GameInstance {
                 let clients = clients.borrow();
                 if let Some(client_rc) = clients.get(client_id) {
                     let client = client_rc.borrow();
-                    match client.get_connection_state() {
-                        network::ConnectionState::Connected => "connected",
-                        network::ConnectionState::Connecting => "connecting",
-                        network::ConnectionState::Disconnected => "disconnected",
-                        network::ConnectionState::Disconnecting => "disconnecting",
-                        network::ConnectionState::Error(msg) => {
+                    match client.get_connection_state().state {
+                        network::ConnectionStateType::Connected => "connected",
+                        network::ConnectionStateType::Connecting => "connecting",
+                        network::ConnectionStateType::Disconnected => "disconnected",
+                        network::ConnectionStateType::Disconnecting => "disconnecting",
+                        network::ConnectionStateType::Error(ref msg) => {
                             log::error!("Connection error: {}", msg);
                             "error"
                         }

@@ -10,8 +10,7 @@ use wasm_bindgen::prelude::*;
 use super::messages::{InputData, PlayerData, ComponentData};
 
 /// メッセージ種別を表す列挙型
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum MessageType {
     /// 接続
     Connect,
@@ -28,24 +27,66 @@ pub enum MessageType {
     /// 入力データ
     Input,
     /// 時間同期
-    TimeSync { client_time: f64, server_time: f64 },
+    TimeSyncRequest { client_time: f64 },
+    /// 時間同期応答
+    TimeSyncResponse { client_time: f64, server_time: f64 },
     /// Ping
     Ping { client_time: f64 },
     /// Pong
     Pong { client_time: f64, server_time: f64 },
     /// エラー
     Error { code: u32, message: String },
+    /// マウスカーソル更新
+    MouseCursorUpdate,
 }
+
+impl std::hash::Hash for MessageType {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        core::mem::discriminant(self).hash(state);
+        match self {
+            Self::Connect => {},
+            Self::ConnectResponse { player_id, success, message } => {
+                player_id.hash(state);
+                success.hash(state);
+                message.hash(state);
+            },
+            Self::Disconnect { reason } => {
+                reason.hash(state);
+            },
+            Self::EntityCreate { entity_id } => {
+                entity_id.hash(state);
+            },
+            Self::EntityDelete { entity_id } => {
+                entity_id.hash(state);
+            },
+            Self::ComponentUpdate => {},
+            Self::Input => {},
+            Self::TimeSyncRequest { .. } => {},
+            Self::TimeSyncResponse { .. } => {},
+            Self::Ping { .. } => {},
+            Self::Pong { .. } => {},
+            Self::Error { code, message } => {
+                code.hash(state);
+                message.hash(state);
+            },
+            Self::MouseCursorUpdate => {},
+        }
+    }
+}
+
+impl Eq for MessageType {}
 
 /// ネットワークメッセージの構造体
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkMessage {
     /// メッセージ種別
     #[serde(flatten)]
+    #[allow(dead_code)]
     pub message_type: MessageType,
     /// シーケンス番号
     pub sequence: Option<u32>,
     /// タイムスタンプ
+    #[allow(dead_code)]
     pub timestamp: f64,
     /// エンティティID（関連する場合）
     pub entity_id: Option<u32>,
@@ -60,6 +101,19 @@ pub struct NetworkMessage {
     /// プレイヤーデータ（プレイヤー関連のメッセージの場合）
     #[serde(skip_serializing_if = "Option::is_none")]
     pub player_data: Option<PlayerData>,
+}
+
+/// マウスカーソル更新データ
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MouseCursorUpdateData {
+    /// プレイヤーID
+    pub player_id: u32,
+    /// X座標
+    pub x: f32,
+    /// Y座標
+    pub y: f32,
+    /// 表示するかどうか
+    pub visible: bool,
 }
 
 impl NetworkMessage {
@@ -168,8 +222,12 @@ impl NetworkMessage {
             MessageType::Input => {
                 js_sys::Reflect::set(&obj, &"type".into(), &"Input".into())?;
             },
-            MessageType::TimeSync { client_time, server_time } => {
-                js_sys::Reflect::set(&obj, &"type".into(), &"TimeSync".into())?;
+            MessageType::TimeSyncRequest { client_time } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"TimeSyncRequest".into())?;
+                js_sys::Reflect::set(&obj, &"client_time".into(), &(*client_time).into())?;
+            },
+            MessageType::TimeSyncResponse { client_time, server_time } => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"TimeSyncResponse".into())?;
                 js_sys::Reflect::set(&obj, &"client_time".into(), &(*client_time).into())?;
                 js_sys::Reflect::set(&obj, &"server_time".into(), &(*server_time).into())?;
             },
@@ -186,6 +244,9 @@ impl NetworkMessage {
                 js_sys::Reflect::set(&obj, &"type".into(), &"Error".into())?;
                 js_sys::Reflect::set(&obj, &"code".into(), &(*code).into())?;
                 js_sys::Reflect::set(&obj, &"message".into(), &message.into())?;
+            },
+            MessageType::MouseCursorUpdate => {
+                js_sys::Reflect::set(&obj, &"type".into(), &"MouseCursorUpdate".into())?;
             },
         }
         
@@ -347,10 +408,14 @@ fn extract_message_type(obj: &js_sys::Object) -> Result<MessageType, JsValue> {
         },
         "componentupdate" => Ok(MessageType::ComponentUpdate),
         "input" => Ok(MessageType::Input),
-        "timesync" => {
+        "timesyncrequest" => {
+            let client_time = extract_number(obj, "client_time")?.unwrap_or(0.0);
+            Ok(MessageType::TimeSyncRequest { client_time })
+        },
+        "timesyncresponse" => {
             let client_time = extract_number(obj, "client_time")?.unwrap_or(0.0);
             let server_time = extract_number(obj, "server_time")?.unwrap_or(0.0);
-            Ok(MessageType::TimeSync { client_time, server_time })
+            Ok(MessageType::TimeSyncResponse { client_time, server_time })
         },
         "ping" => {
             let client_time = extract_number(obj, "client_time")?.unwrap_or(0.0);
@@ -366,6 +431,7 @@ fn extract_message_type(obj: &js_sys::Object) -> Result<MessageType, JsValue> {
             let message = extract_string(obj, "message")?.unwrap_or_default();
             Ok(MessageType::Error { code, message })
         },
+        "mousecursorupdate" => Ok(MessageType::MouseCursorUpdate),
         _ => {
             web_sys::console::error_1(&format!("未知のメッセージタイプ: {}", type_str).into());
             Err(JsValue::from_str(&format!("未知のメッセージタイプ: {}", type_str)))

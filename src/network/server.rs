@@ -8,7 +8,7 @@ use js_sys::Date;
 
 use super::protocol::{NetworkMessage, MessageType};
 use super::messages::{PlayerData, ComponentData};
-use super::{ConnectionState, NetworkError, NetworkConfig};
+use super::{ConnectionState, ConnectionStateType, NetworkError, NetworkConfig, TimeSyncData};
 use crate::ecs::World;
 
 /// サーバー接続クライアント情報
@@ -131,18 +131,21 @@ impl NetworkServer {
             return Err(NetworkError::ConnectionError("サーバーが起動していません".to_string()));
         }
         
+        // 新しいクライアントIDを生成
         let client_id = self.next_client_id;
         self.next_client_id += 1;
         
+        // 新しいクライアントを作成
         let client = ServerClient {
             id: client_id,
             player_data,
-            connection_state: ConnectionState::Connected,
+            connection_state: ConnectionState::connected(),
             last_message_time: Date::now(),
             sequence_number: 0,
             rtt: 0.0,
         };
         
+        // クライアントをマップに追加
         self.clients.insert(client_id, client);
         
         // 接続応答メッセージをキューに追加
@@ -163,22 +166,20 @@ impl NetworkServer {
 
     /// クライアントを切断
     pub fn disconnect_client(&mut self, client_id: u32, reason: Option<String>) -> Result<(), NetworkError> {
+        // クライアントが存在するか確認
+        if !self.clients.contains_key(&client_id) {
+            return Err(NetworkError::ConnectionError(format!("クライアント {} は存在しません", client_id)));
+        }
+        
+        // 切断メッセージを作成して送信
+        let disconnect_msg = NetworkMessage::new(MessageType::Disconnect { reason: reason.clone() })
+            .with_sequence(self.next_sequence_number());
+        
+        self.send_message(Some(client_id), disconnect_msg)?;
+        
+        // クライアントの状態を切断中に設定
         if let Some(client) = self.clients.get_mut(&client_id) {
-            client.connection_state = ConnectionState::Disconnecting;
-            
-            // 切断メッセージをキューに追加
-            let disconnect_msg = NetworkMessage::new(MessageType::Disconnect {
-                reason: reason.clone(),
-            }).with_sequence(self.next_sequence_number());
-            
-            self.pending_messages.push_back((Some(client_id), disconnect_msg));
-            
-            // クライアントをリストから削除
-            self.clients.remove(&client_id);
-            
-            if self.config.debug_mode {
-                web_sys::console::log_1(&format!("クライアント {} が切断しました: {:?}", client_id, reason).into());
-            }
+            client.connection_state.set_state(ConnectionStateType::Disconnecting);
         }
         
         Ok(())
@@ -328,9 +329,9 @@ impl NetworkServer {
                     
                     self.send_message(Some(client_id), pong).ok();
                 },
-                MessageType::TimeSync { client_time, .. } => {
+                MessageType::TimeSyncRequest { client_time } => {
                     // 時間同期メッセージへの応答
-                    let time_sync = NetworkMessage::new(MessageType::TimeSync {
+                    let time_sync = NetworkMessage::new(MessageType::TimeSyncResponse {
                         client_time,
                         server_time: self.server_time,
                     }).with_sequence(self.next_sequence_number());

@@ -10,11 +10,12 @@ use js_sys::Date;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::cell::RefCell;
-use log;
+use log::{debug, error, info, warn};
+use serde_json;
 
-use super::protocol::{NetworkMessage, MessageType};
+use super::protocol::{NetworkMessage, MessageType, MouseCursorUpdateData};
 use super::messages::{InputData, PlayerData, EntitySnapshot};
-use super::{ConnectionState, NetworkError, TimeSyncData, NetworkConfig};
+use super::{ConnectionState, ConnectionStateType, NetworkError, TimeSyncData, NetworkConfig};
 use crate::ecs::World;
 
 /// ネットワークコンポーネント（エンティティに付与される）
@@ -45,72 +46,64 @@ impl Default for NetworkComponent {
 }
 
 /// ネットワーククライアント
-#[derive(Clone)]
 pub struct NetworkClient {
-    /// WebSocket接続
-    connection: Option<WebSocket>,
-    /// 接続状態
-    connection_state: ConnectionState,
-    /// 受信メッセージキュー
-    message_queue: VecDeque<NetworkMessage>,
-    /// 送信待ちメッセージキュー
-    pending_messages: VecDeque<NetworkMessage>,
-    /// プレイヤーID
+    /// クライアントID
     player_id: Option<u32>,
-    /// シーケンス番号カウンタ
-    sequence_number: u32,
-    /// 往復遅延時間（ms）
-    rtt: f64,
-    /// 時間同期データ
-    time_sync_data: TimeSyncData,
-    /// エンティティスナップショットキャッシュ
-    _entity_snapshots: HashMap<u32, Vec<EntitySnapshot>>,
-    /// 他プレイヤーのプレイヤーデータ
-    _players: HashMap<u32, PlayerData>,
-    /// ネットワーク設定
-    config: NetworkConfig,
-    /// エラーメッセージ
+    /// ウェブソケット
+    socket: Option<web_sys::WebSocket>,
+    /// 接続状態
+    connected: bool,
+    /// 最後のエラー
     last_error: Option<String>,
-    /// 接続が確立された時刻
-    connected_at: Option<f64>,
-    /// 最後にPingを送信した時刻
-    last_ping_time: Option<f64>,
     /// 接続試行回数
     connection_attempts: u32,
     /// サーバーURL
     server_url: String,
+    /// メッセージハンドラ
+    message_handlers: HashMap<MessageType, Box<dyn Fn(NetworkMessage)>>,
+    /// 接続状態
+    connection_state: Rc<RefCell<ConnectionState>>,
+    /// シーケンス番号
+    sequence_number: u32,
+    /// 設定
+    config: NetworkConfig,
+    /// 時間同期データ
+    time_sync_data: TimeSyncData,
+    /// 接続開始時刻
+    connected_at: Option<f64>,
+    /// 最後のPing送信時刻
+    last_ping_time: Option<f64>,
+    /// RTT(往復遅延時間)
+    rtt: f64,
 }
 
 impl NetworkClient {
     /// 新しいネットワーククライアントを作成
     pub fn new(config: NetworkConfig) -> Self {
         Self {
-            connection: None,
-            connection_state: ConnectionState::Disconnected,
-            message_queue: VecDeque::new(),
-            pending_messages: VecDeque::new(),
+            socket: None,
+            connected: false,
             player_id: None,
-            sequence_number: 0,
-            rtt: 0.0,
-            time_sync_data: TimeSyncData::default(),
-            _entity_snapshots: HashMap::new(),
-            _players: HashMap::new(),
-            config,
-            last_error: None,
-            connected_at: None,
-            last_ping_time: None,
             connection_attempts: 0,
             server_url: String::new(),
+            message_handlers: HashMap::new(),
+            connection_state: Rc::new(RefCell::new(ConnectionState::disconnected())),
+            sequence_number: 0,
+            config,
+            time_sync_data: TimeSyncData::default(),
+            connected_at: None,
+            last_ping_time: None,
+            rtt: 0.0,
+            last_error: None,
         }
     }
 
     /// サーバーに接続
     pub fn connect(&mut self, url: &str) -> Result<(), NetworkError> {
-        if self.connection_state == ConnectionState::Connected {
+        if self.connected {
             return Ok(());
         }
 
-        self.connection_state = ConnectionState::Connecting;
         self.server_url = url.to_string();
 
         // WebSocketの作成
@@ -119,7 +112,6 @@ impl NetworkClient {
             Err(err) => {
                 let error_msg = format!("WebSocket作成に失敗: {:?}", err);
                 log::error!("{}", error_msg);
-                self.connection_state = ConnectionState::Disconnected;
                 return Err(NetworkError::ConnectionError(error_msg));
             }
         };
@@ -128,9 +120,8 @@ impl NetworkClient {
         ws.set_binary_type(web_sys::BinaryType::Arraybuffer);
 
         // 自己参照のクロージャを回避するために弱参照を作成
-        let message_queue = Rc::new(RefCell::new(self.message_queue.clone()));
-        let message_queue_weak = Rc::downgrade(&message_queue);
-        let connection_state = Rc::new(RefCell::new(self.connection_state.clone()));
+        let connection_state = Rc::new(RefCell::new(ConnectionState::connecting()));
+        let connection_state_weak: Rc<RefCell<ConnectionState>> = connection_state.clone();
 
         // WebSocketが開いたときのコールバック
         let connection_state_clone = connection_state.clone();
@@ -138,25 +129,25 @@ impl NetworkClient {
             log::info!("🌐 WebSocket接続完了！");
             // 接続状態を更新
             if let Ok(mut state) = connection_state_clone.try_borrow_mut() {
-                *state = ConnectionState::Connected;
+                state.set_state(ConnectionStateType::Connected);
             }
         }) as Box<dyn FnMut(Event)>);
 
         // メッセージを受信したときのコールバック
         let onmessage_callback = Closure::wrap(Box::new(move |event: MessageEvent| {
             // メッセージキューが存在する場合のみ処理
-            if let Some(message_queue) = message_queue_weak.upgrade() {
-                if let Ok(text) = event.data().dyn_into::<js_sys::JsString>() {
-                    let text_str = text.as_string().unwrap();
-                    match NetworkMessage::from_json(&text_str) {
-                        Ok(message) => {
-                            log::debug!("📩 メッセージ受信: {:?}", message);
-                            // 安全にメッセージをキューに追加
-                            message_queue.borrow_mut().push_back(message);
+            if let Ok(text) = event.data().dyn_into::<js_sys::JsString>() {
+                let text_str = text.as_string().unwrap();
+                match NetworkMessage::from_json(&text_str) {
+                    Ok(message) => {
+                        log::debug!("📩 メッセージ受信: {:?}", message);
+                        // 安全にメッセージをキューに追加
+                        if let Ok(mut state) = connection_state_weak.try_borrow_mut() {
+                            state.push_back(message);
                         }
-                        Err(err) => {
-                            log::error!("❌ メッセージのパースに失敗: {:?}", err);
-                        }
+                    }
+                    Err(err) => {
+                        log::error!("❌ メッセージのパースに失敗: {:?}", err);
                     }
                 }
             }
@@ -185,8 +176,9 @@ impl NetworkClient {
         onclose_callback.forget();
 
         // 接続の保存
-        self.connection = Some(ws);
-        self.connected_at = Some(js_sys::Date::now() as f64);
+        self.socket = Some(ws);
+        self.connected = true;
+        self.player_id = Some(0); // Assuming a default player_id
 
         log::info!("🔄 サーバーに接続中: {}", url);
         Ok(())
@@ -195,8 +187,8 @@ impl NetworkClient {
     /// サーバーから切断
     pub fn disconnect(&mut self) -> Result<(), NetworkError> {
         // connection と状態を先に取得して保存
-        let connection_clone = self.connection.clone();
-        let is_connected = self.connection_state == ConnectionState::Connected;
+        let connection_clone = self.socket.clone();
+        let is_connected = self.connected;
         
         if let Some(ws) = connection_clone {
             if is_connected {
@@ -220,8 +212,8 @@ impl NetworkClient {
             }
         }
         
-        self.connection_state = ConnectionState::Disconnected;
-        self.connection = None;
+        self.connected = false;
+        self.socket = None;
         self.player_id = None;
         
         Ok(())
@@ -235,7 +227,7 @@ impl NetworkClient {
         message.sequence = Some(next_seq);
         message.timestamp = js_sys::Date::now() as f64;
 
-        if let Some(ws) = &self.connection {
+        if let Some(ws) = &self.socket {
             // WebSocketの状態を確認
             match ws.ready_state() {
                 WebSocket::OPEN => {
@@ -257,7 +249,7 @@ impl NetworkClient {
                         Err(err) => {
                             log::error!("メッセージ送信エラー: {:?}", err);
                             // エラーが発生した場合も一旦保留キューに入れる (再接続後に送信試行)
-                            self.pending_messages.push_back(message);
+                            self.connection_state.borrow_mut().push_back(message);
                             Err(NetworkError::MessageProcessingError(format!("メッセージ送信エラー: {:?}", err)))
                         }
                     }
@@ -265,21 +257,20 @@ impl NetworkClient {
                 WebSocket::CONNECTING => {
                     // 接続中の場合は保留キューへ
                     log::warn!("接続中のためメッセージを保留: {:?}", message);
-                    self.pending_messages.push_back(message);
+                    self.connection_state.borrow_mut().push_back(message);
                     Ok(())
                 }
                 _ => {
                     // その他の状態（CLOSING, CLOSED）の場合はエラーまたは保留
                     log::error!("接続が確立されていないためメッセージを送信できません (状態: {})。メッセージを保留します。", ws.ready_state());
-                    self.pending_messages.push_back(message);
-                    // Err(NetworkError::ConnectionError("接続が確立されていません".to_string()))
+                    self.connection_state.borrow_mut().push_back(message);
                     Ok(()) // エラーではなく保留にする
                 }
             }
         } else {
             // 接続オブジェクト自体がない場合は保留キューへ
             log::warn!("接続がないためメッセージを保留: {:?}", message);
-            self.pending_messages.push_back(message);
+            self.connection_state.borrow_mut().push_back(message);
             Ok(())
         }
     }
@@ -303,7 +294,7 @@ impl NetworkClient {
         self.process_messages();
         
         // 接続されている場合の定期処理
-        if self.connection_state == ConnectionState::Connected {
+        if self.connected {
             // 時間同期
             self.update_time_sync();
             
@@ -317,7 +308,7 @@ impl NetworkClient {
     /// 接続状態の確認
     fn check_connection_status(&mut self) {
         // 接続中の場合、タイムアウトをチェック
-        if self.connection_state == ConnectionState::Connecting {
+        if self.connected {
             let now = Date::now();
             let connected_since = self.connected_at.unwrap_or(now);
             if now - connected_since > self.config.connection_timeout_ms as f64 {
@@ -329,7 +320,7 @@ impl NetworkClient {
                     self.connect(&server_url).ok();
                 } else {
                     // 再接続試行回数を超えた場合
-                    self.connection_state = ConnectionState::Error("接続タイムアウト".to_string());
+                    self.connected = false;
                 }
             }
         }
@@ -338,18 +329,18 @@ impl NetworkClient {
     /// メッセージキューを処理し、各メッセージに対して適切なアクションを実行
     pub fn process_messages(&mut self) {
         // 接続が確立されていない場合は処理しない
-        if self.connection_state != ConnectionState::Connected {
+        if !self.connected {
             return;
         }
 
         // キューからすべてのメッセージを取り出し処理する
-        let message_count = self.message_queue.len();
+        let message_count = self.connection_state.borrow().len();
         if message_count > 0 {
             web_sys::console::log_1(&format!("処理するメッセージ数: {}", message_count).into());
         }
 
         for _ in 0..message_count {
-            if let Some(message) = self.message_queue.pop_front() {
+            if let Some(message) = self.connection_state.borrow_mut().pop_front() {
                 match message.message_type {
                     MessageType::ConnectResponse { player_id, success, message: msg } => {
                         if success {
@@ -398,7 +389,11 @@ impl NetworkClient {
                             }
                         }
                     }
-                    MessageType::TimeSync { client_time, server_time } => {
+                    MessageType::TimeSyncRequest { client_time: _ } => {
+                        // 時間同期の処理
+                        // こちらは必要ない処理なので削除
+                    }
+                    MessageType::TimeSyncResponse { client_time, server_time } => {
                         // 時間同期の処理
                         let now = Date::now();
                         let rtt = now - client_time;
@@ -435,6 +430,13 @@ impl NetworkClient {
                         // Connectメッセージは通常クライアントからサーバーに送信されるもの
                         web_sys::console::warn_1(&"サーバーからConnectメッセージを受信（異常）".into());
                     }
+                    MessageType::MouseCursorUpdate => {
+                        // マウスカーソル更新メッセージの処理
+                        web_sys::console::log_1(&"マウスカーソル更新メッセージを受信".into());
+                        if let Some(handler) = self.message_handlers.get(&MessageType::MouseCursorUpdate) {
+                            handler(message);
+                        }
+                    }
                 }
             }
         }
@@ -449,9 +451,8 @@ impl NetworkClient {
         
         if now - last_sync > TIME_SYNC_INTERVAL {
             // 時間同期メッセージを送信
-            let message = NetworkMessage::new(MessageType::TimeSync { 
+            let message = NetworkMessage::new(MessageType::TimeSyncRequest { 
                 client_time: now,
-                server_time: 0.0, // サーバーが設定する値
             }).with_sequence(self.next_sequence_number());
             
             self.send_message(message).ok();
@@ -471,17 +472,27 @@ impl NetworkClient {
     /// 保留中のメッセージを送信
     fn send_pending_messages(&mut self) {
         // 接続状態の確認 - 接続済みの場合のみ処理
-        if self.connection_state != ConnectionState::Connected {
+        if !self.connected {
             return;
         }
         
         // WebSocketの状態を確認 - OPEN状態の場合のみ処理
-        if let Some(ws) = &self.connection {
+        if let Some(ws) = &self.socket {
             if ws.ready_state() != WebSocket::OPEN {
                 return;
             }
             
-            while let Some(message) = self.pending_messages.pop_front() {
+            // メッセージをコピーして処理
+            let mut messages = Vec::new();
+            {
+                let mut connection_state = self.connection_state.borrow_mut();
+                while let Some(message) = connection_state.pop_front() {
+                    messages.push(message);
+                }
+            }
+            
+            // メッセージを送信
+            for message in messages {
                 if let Err(err) = self.send_message(message) {
                     web_sys::console::error_1(&format!("保留メッセージの送信エラー: {:?}", err).into());
                     break;
@@ -503,8 +514,8 @@ impl NetworkClient {
     }
 
     /// 接続状態を取得
-    pub fn get_connection_state(&self) -> &ConnectionState {
-        &self.connection_state
+    pub fn get_connection_state(&self) -> ConnectionState {
+        (*self.connection_state.borrow()).clone()
     }
 
     /// RTTを取得
@@ -515,6 +526,34 @@ impl NetworkClient {
     /// 最後のエラーメッセージを取得
     pub fn get_last_error(&self) -> Option<&String> {
         self.last_error.as_ref()
+    }
+
+    /// マウスカーソル更新メッセージを送信する
+    pub fn send_mouse_cursor_update(&mut self, x: f32, y: f32, visible: bool) -> Result<(), NetworkError> {
+        if let Some(player_id) = self.player_id {
+            let _data = MouseCursorUpdateData {
+                player_id,
+                x,
+                y,
+                visible,
+            };
+            
+            let message = NetworkMessage::new(MessageType::MouseCursorUpdate)
+                .with_player_id(player_id);
+                
+            self.send_message(message)
+        } else {
+            log::warn!("プレイヤーIDが設定されていないためマウスカーソル更新を送信できません");
+            Ok(()) // プレイヤーIDがない場合はエラーとしない
+        }
+    }
+
+    /// マウスカーソル更新ハンドラを登録する
+    pub fn register_mouse_cursor_handler<F>(&mut self, _handler: F)
+    where
+        F: Fn(MouseCursorUpdateData) + 'static,
+    {
+        // 実装は後で行います
     }
 }
 
