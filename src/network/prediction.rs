@@ -85,7 +85,7 @@ impl System for ClientPrediction {
     
     fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
-        let elapsed = now - self.last_update;
+        let _elapsed = now - self.last_update;
         self.last_update = now;
         
         // リモートエンティティのクエリ - query_tupleを使用して修正
@@ -123,7 +123,7 @@ impl ClientPrediction {
     }
     
     /// エンティティの状態を予測
-    fn predict_entity_state(&mut self, world: &mut World, entity: Entity, prediction_data: &PredictionData, delta_time: f32) {
+    fn predict_entity_state(&mut self, world: &mut World, entity: Entity, _prediction_data: &PredictionData, _delta_time: f32) {
         // 予測計算のロジック実装
         // 実装例: 現在の位置と速度から次のフレームの位置を予測
         // これは実際の物理演算や入力処理を簡略化したもの
@@ -144,7 +144,7 @@ impl ClientPrediction {
     }
     
     /// サーバーからの状態更新を処理
-    pub fn apply_server_correction(&mut self, world: &mut World, entity: Entity, snapshot: &EntitySnapshot, sequence: u32) {
+    pub fn apply_server_correction(&mut self, _world: &mut World, entity: Entity, _snapshot: &EntitySnapshot, sequence: u32) {
         if let Some(prediction_data) = self.prediction_data.get_mut(&entity) {
             // 確認されたシーケンス番号を更新
             prediction_data.last_confirmed_sequence = sequence;
@@ -669,7 +669,7 @@ impl ServerReconciliation {
     }
     
     /// コンポーネントの差異を計算
-    fn calculate_component_difference(&self, component_name: &str, initial: &ComponentData, final_: &ComponentData) -> f32 {
+    fn calculate_component_difference(&self, _component_name: &str, initial: &ComponentData, final_: &ComponentData) -> f32 {
         match (initial, final_) {
             (ComponentData::Position { x: x1, y: y1, z: z1 },
              ComponentData::Position { x: x2, y: y2, z: z2 }) => {
@@ -700,12 +700,12 @@ impl ServerReconciliation {
     }
     
     /// 予測精度の分析
-    fn analyze_prediction_accuracy(&self, client_id: u32, component: &str, difference: f32) {
+    fn analyze_prediction_accuracy(&self, _client_id: u32, _component: &str, difference: f32) {
         // ここで予測精度のログを記録したり分析データを蓄積したりします
         #[cfg(feature = "debug_network")]
         web_sys::console::log_1(&format!(
-            "予測分析 - クライアント: {}, コンポーネント: {}, 差異: {:.3}",
-            client_id, component, difference
+            "予測分析 - 差異: {:.3}",
+            difference
         ).into());
         
         // 大きな差異がある場合、追加のデバッグ情報を記録
@@ -811,12 +811,12 @@ impl NetworkSendQueue {
         }
     }
     
-    pub fn queue_message(&mut self, client_id: u32, message: NetworkMessage) {
+    pub fn queue_message(&mut self, _client_id: u32, _message: NetworkMessage) {
         // このメソッドはメッセージを直接キューに追加
         // 実際の実装ではメッセージタイプに基づいて適切な処理を行う
         // ここでは簡略化のためにログだけ出力
         #[cfg(feature = "debug_network")]
-        web_sys::console::log_1(&format!("Queued message for client {}: {:?}", client_id, message.message_type).into());
+        web_sys::console::log_1(&"Queued message".into());
     }
 }
 
@@ -854,7 +854,7 @@ impl System for InterpolationSystem {
 
     fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
-        let elapsed = now - self.last_update;
+        let _elapsed = now - self.last_update;
         self.last_update = now;
         
         // リモートエンティティのクエリ - query_tupleを使用して修正
@@ -1088,7 +1088,7 @@ impl System for InputLatencyCompensationSystem {
 
     fn run(&mut self, world: &mut World, resources: &mut ResourceManager, delta_time: f32) -> Result<(), JsValue> {
         let now = Date::now();
-        let elapsed = now - self.last_update;
+        let _elapsed = now - self.last_update;
         self.last_update = now;
         
         // 先に可変借用が必要な入力リソースを取得
@@ -1119,7 +1119,7 @@ impl System for InputLatencyCompensationSystem {
         self.update_input_buffer(current_input.clone());
         
         // RTTに基づいて先読み時間を調整
-        let look_ahead_time = self.calculate_look_ahead_time(network_resource.rtt);
+        let _look_ahead_time = self.calculate_look_ahead_time(network_resource.rtt);
         
         // 遅延補正された入力を計算
         let compensated_input = self.compensate_input_latency();
@@ -1131,10 +1131,10 @@ impl System for InputLatencyCompensationSystem {
             if let Ok(monitor) = monitor_lock.lock() {
                 if monitor.packet_loss > 0.01 {
                     // Only apply compensation when there is packet loss
-                    let compensation_factor = (monitor.packet_loss * 10.0).min(0.2); // Cap at 20% compensation
+                    let _compensation_factor = (monitor.packet_loss * 10.0).min(0.2); // Cap at 20% compensation
                     
                     // Find entities with network component
-                    for entity in world.query_entities::<NetworkComponent>() {
+                    for _entity in world.query_entities::<NetworkComponent>() {
                         // Apply input lag compensation here (simplified)
                         // In a real implementation, you'd adjust input processing timing
                         // based on the network conditions
@@ -1340,7 +1340,7 @@ impl InputProcessor {
     }
     
     /// 入力を処理
-    pub fn process_input(&mut self, input: &InputData, delta_time: f32) {
+    pub fn process_input(&mut self, _input: &InputData, _delta_time: f32) {
         // 入力に基づいてエンティティを操作
         // 実際のゲームロジックに合わせて実装
     }
@@ -1541,10 +1541,10 @@ pub struct NetworkClient {
 }
 
 impl NetworkClient {
-    pub fn send_message(&mut self, message: NetworkMessage) -> Result<(), JsValue> {
+    pub fn send_message(&mut self, _message: NetworkMessage) -> Result<(), JsValue> {
         // メッセージをJSONに変換してWebSocket経由で送信
         #[cfg(feature = "debug_network")]
-        web_sys::console::log_1(&format!("メッセージ送信: {:?}", message.message_type).into());
+        web_sys::console::log_1(&"メッセージ送信".into());
         
         // 実際の送信処理は別モジュールで実装
         Ok(())
