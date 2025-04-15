@@ -531,11 +531,11 @@ pub struct CompressionStats {
     /// 処理したメッセージ数
     message_count: usize,
     /// デルタ圧縮で省略されたフィールド数
-    delta_skipped_fields: usize,
+    _delta_skipped_fields: usize,
     /// マスキングで省略されたフィールド数
-    masked_fields: usize,
+    _masked_fields: usize,
     /// 量子化された値の数
-    quantized_values: usize,
+    _quantized_values: usize,
 }
 
 impl DefaultMessageCompressor {
