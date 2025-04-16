@@ -125,6 +125,8 @@ pub enum NetworkError {
     TimeoutError,
     /// 認証エラー
     AuthenticationError(String),
+    /// シリアライズエラー
+    SerializationError,
 }
 
 impl std::fmt::Display for NetworkError {
@@ -134,6 +136,7 @@ impl std::fmt::Display for NetworkError {
             NetworkError::MessageProcessingError(msg) => write!(f, "メッセージ処理エラー: {}", msg),
             NetworkError::TimeoutError => write!(f, "タイムアウトエラー"),
             NetworkError::AuthenticationError(msg) => write!(f, "認証エラー: {}", msg),
+            NetworkError::SerializationError => write!(f, "シリアライズエラー"),
         }
     }
 }
@@ -181,6 +184,14 @@ pub struct TimeSyncData {
     pub accuracy: f64,
     /// 最後の同期時刻
     pub last_sync: f64,
+}
+
+impl TimeSyncData {
+    /// 時間差を更新する
+    pub fn update_time_difference(&mut self, time_diff: f64) {
+        self.time_offset = time_diff;
+        self.last_sync = js_sys::Date::now();
+    }
 }
 
 /// エンティティ所有権情報

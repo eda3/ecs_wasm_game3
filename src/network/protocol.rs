@@ -324,9 +324,12 @@ impl NetworkMessage {
                 js_sys::Reflect::set(&player_obj, &"team".into(), &team.into())?;
             }
             
-            if let Some(ref _settings) = player.settings {
+            if let Some(ref settings) = player.settings {
                 let settings_obj = js_sys::Object::new();
                 // 設定データの処理
+                for (key, value) in settings {
+                    js_sys::Reflect::set(&settings_obj, &key.into(), &JsValue::from_str(&value.to_string()))?;
+                }
                 js_sys::Reflect::set(&player_obj, &"settings".into(), &settings_obj)?;
             }
             
@@ -338,6 +341,42 @@ impl NetworkMessage {
         })?;
         
         Ok(String::from(json.as_string().unwrap_or_default()))
+    }
+
+    /// プレイヤーIDを設定（可変参照版）
+    pub fn set_player_id(&mut self, player_id: u32) {
+        self.player_id = Some(player_id);
+    }
+    
+    /// データ文字列を設定する
+    /// 
+    /// このメソッドは、汎用的なデータ文字列（通常はJSON）をメッセージに付加するために使用されます。
+    /// マウスカーソル更新などのカスタムデータ型を送信する場合に便利です。
+    pub fn set_data(&mut self, data: String) {
+        // データを一時的にPlayerData構造体に格納
+        let mut settings = HashMap::new();
+        settings.insert("data".to_string(), serde_json::Value::String(data));
+        
+        self.player_data = Some(PlayerData {
+            name: "データ".to_string(),
+            avatar: None,
+            team: None,
+            settings: Some(settings),
+        });
+    }
+    
+    /// データ文字列を取得
+    pub fn get_data_as_string(&self) -> Result<String, JsValue> {
+        if let Some(player_data) = &self.player_data {
+            if let Some(settings) = &player_data.settings {
+                if let Some(data) = settings.get("data") {
+                    if let Some(data_str) = data.as_str() {
+                        return Ok(data_str.to_string());
+                    }
+                }
+            }
+        }
+        Err(JsValue::from_str("データフィールドがありません"))
     }
 }
 

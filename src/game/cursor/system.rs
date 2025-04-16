@@ -137,6 +137,17 @@ impl System for MouseCursorSystem {
                     }
                 }
             }
+            
+            // NetworkClientからの新しいカーソル更新を処理
+            if let Some(network_client) = resources.get_mut::<NetworkClient>() {
+                // 保留中のカーソル更新を取得
+                let pending_updates = std::mem::take(&mut network_client.pending_cursor_updates);
+                
+                // 各更新を処理
+                for update in pending_updates {
+                    self.handle_cursor_update(world, update);
+                }
+            }
         }
         
         Ok(())

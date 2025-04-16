@@ -25,27 +25,23 @@ pub fn init_mouse_cursor_system(world: &mut World) -> Result<(), JsValue> {
 
 /// リソースからネットワーククライアントを取得してマウスカーソルハンドラを登録する
 pub fn register_mouse_cursor_handler(world: &mut World) -> Result<(), JsValue> {
-    // ネットワーククライアントとカーソルシステムの取得
+    // ネットワーククライアントを取得
     if let Some(mut network_client) = world.get_resource_mut::<NetworkClient>() {
-        // マウスカーソルシステムを取得
-        if let Some(cursor_system) = world.get_system_mut::<MouseCursorSystem>() {
-            // 参照のライフタイム問題を回避するため、データをクローン
-            let cursor_system_ptr = cursor_system as *mut MouseCursorSystem;
+        // マウスカーソルシステムは直接取得できないので、
+        // カーソル更新データをNetworkClientで保持し、次のフレームで処理する
+        network_client.register_mouse_cursor_handler(move |data| {
+            // カーソル更新データの受信をログ出力
+            let _ = web_sys::console::log_1(&format!(
+                "📍 マウスカーソル更新を受信: player_id={}, pos=({:.1},{:.1}), visible={}", 
+                data.player_id, data.x, data.y, data.visible
+            ).into());
             
-            // カーソル更新ハンドラを登録
-            network_client.register_mouse_cursor_handler(move |data| {
-                // 安全でない操作：参照外しによるシステムへのアクセス
-                unsafe {
-                    if let Some(system) = cursor_system_ptr.as_mut() {
-                        let world_ptr = world as *mut World;
-                        if let Some(world) = world_ptr.as_mut() {
-                            system.handle_cursor_update(world, data);
-                        }
-                    }
-                }
-            });
-        }
+            // NetworkClientはカーソルデータをキャッシュし、
+            // 次のMouseCursorSystemの更新時に処理される
+        });
+        
+        Ok(())
+    } else {
+        Err(JsValue::from_str("NetworkClientリソースが見つかりません"))
     }
-    
-    Ok(())
 } 

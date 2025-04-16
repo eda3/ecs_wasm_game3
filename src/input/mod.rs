@@ -5,7 +5,10 @@
 //! 複雑な入力処理（キーリピート、ジェスチャー検出など）も提供します。
 
 use std::collections::{HashMap, HashSet};
+use wasm_bindgen::prelude::*;
 use js_sys::Date;
+use web_sys::{HtmlCanvasElement, window};
+use std::fmt;
 use wasm_bindgen::JsValue;
 
 use crate::ecs::{Entity, System, World, SystemPhase, SystemPriority, ResourceManager, Resource};
@@ -814,6 +817,8 @@ pub struct InputResource {
     pub state: InputState,
     /// 入力システム
     pub system: InputSystem,
+    /// マウスがキャンバス内にあるかどうか
+    is_mouse_in_canvas: bool,
 }
 
 impl InputResource {
@@ -822,6 +827,7 @@ impl InputResource {
         Self {
             state: InputState::new(),
             system: InputSystem::new(),
+            is_mouse_in_canvas: false,
         }
     }
     
@@ -833,6 +839,19 @@ impl InputResource {
     /// マウスイベントを処理
     pub fn handle_mouse_event(&mut self, event: &MouseEvent) {
         self.system.handle_mouse_event(event);
+        
+        // マウスイベントのタイプに基づいて、キャンバス内状態を設定
+        match event.event_type.as_str() {
+            "mouseenter" => self.is_mouse_in_canvas = true,
+            "mouseleave" => self.is_mouse_in_canvas = false,
+            // その他のイベントでは状態を変更しない
+            _ => {}
+        }
+    }
+    
+    /// マウスがキャンバス内にあるかどうかを返す
+    pub fn is_mouse_in_canvas(&self) -> bool {
+        self.is_mouse_in_canvas
     }
     
     /// 入力状態を更新
@@ -844,6 +863,25 @@ impl InputResource {
     pub fn set_mouse_position(&mut self, x: f32, y: f32) {
         // delta_timeは小さな値を使用（実際の時間は不明なため）
         self.state.update_mouse_position(x, y, 0.016);
+        
+        // HTMLCanvasElementの境界をチェックしてキャンバス内かどうかを更新
+        if let Some(window) = web_sys::window() {
+            if let Some(document) = window.document() {
+                if let Some(canvas) = document.get_element_by_id("game-canvas") {
+                    if let Ok(canvas) = canvas.dyn_into::<web_sys::HtmlCanvasElement>() {
+                        let rect = canvas.get_bounding_client_rect();
+                        let client_x = x as f64;
+                        let client_y = y as f64;
+                        
+                        self.is_mouse_in_canvas = 
+                            client_x >= rect.left() && 
+                            client_x <= rect.right() && 
+                            client_y >= rect.top() && 
+                            client_y <= rect.bottom();
+                    }
+                }
+            }
+        }
     }
     
     /// マウス位置を取得

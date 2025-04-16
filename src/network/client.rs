@@ -9,14 +9,19 @@ use web_sys::{WebSocket, MessageEvent, ErrorEvent, CloseEvent, Event};
 use js_sys::Date;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
-use std::cell::RefCell;
-use log::{debug, error, info, warn};
+use std::cell::{RefCell, Cell};
+use log::{debug, error, info, warn, trace};
 use serde_json;
+use std::thread::LocalKey;
 
 use super::protocol::{NetworkMessage, MessageType, MouseCursorUpdateData};
 use super::messages::{InputData, PlayerData, EntitySnapshot};
 use super::{ConnectionState, ConnectionStateType, NetworkError, TimeSyncData, NetworkConfig};
 use crate::ecs::{World, Resource};
+
+thread_local! {
+    static MOUSE_CURSOR_HANDLERS: RefCell<Vec<Box<dyn Fn(MouseCursorUpdateData)>>> = RefCell::new(Vec::new());
+}
 
 /// ネットワークコンポーネント（エンティティに付与される）
 #[derive(Debug, Clone)]
@@ -46,7 +51,7 @@ impl Default for NetworkComponent {
 }
 
 /// ネットワーククライアント
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct NetworkClient {
     /// クライアントID
     player_id: Option<u32>,
@@ -60,8 +65,9 @@ pub struct NetworkClient {
     connection_attempts: u32,
     /// サーバーURL
     server_url: String,
-    /// メッセージハンドラ
-    message_handlers: HashMap<MessageType, Box<dyn Fn(NetworkMessage)>>,
+    /// メッセージハンドラ（Debug対応版）
+    #[allow(dead_code)]
+    message_handlers_map: HashMap<MessageType, String>, // ハンドラの説明を保存
     /// 接続状態
     connection_state: Rc<RefCell<ConnectionState>>,
     /// シーケンス番号
@@ -76,6 +82,8 @@ pub struct NetworkClient {
     last_ping_time: Option<f64>,
     /// RTT(往復遅延時間)
     rtt: f64,
+    /// 受信したマウスカーソル更新データ
+    pub pending_cursor_updates: Vec<MouseCursorUpdateData>,
 }
 
 // NetworkClientにResourceトレイトを実装
@@ -89,6 +97,28 @@ impl Resource for NetworkClient {
     }
 }
 
+// カスタムDebug実装
+impl std::fmt::Debug for NetworkClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NetworkClient")
+            .field("player_id", &self.player_id)
+            .field("connected", &self.connected)
+            .field("last_error", &self.last_error)
+            .field("connection_attempts", &self.connection_attempts)
+            .field("server_url", &self.server_url)
+            .field("message_handlers_map", &self.message_handlers_map)
+            .field("sequence_number", &self.sequence_number)
+            .field("config", &self.config)
+            .field("time_sync_data", &self.time_sync_data)
+            .field("connected_at", &self.connected_at)
+            .field("last_ping_time", &self.last_ping_time)
+            .field("rtt", &self.rtt)
+            .field("pending_cursor_updates", &self.pending_cursor_updates)
+            // mouse_cursor_handlerは除外（DebugトレイトがFn型に実装されていないため）
+            .finish()
+    }
+}
+
 impl NetworkClient {
     /// 新しいネットワーククライアントを作成
     pub fn new(config: NetworkConfig) -> Self {
@@ -98,7 +128,7 @@ impl NetworkClient {
             player_id: None,
             connection_attempts: 0,
             server_url: String::new(),
-            message_handlers: HashMap::new(),
+            message_handlers_map: HashMap::new(),
             connection_state: Rc::new(RefCell::new(ConnectionState::disconnected())),
             sequence_number: 0,
             config,
@@ -107,6 +137,7 @@ impl NetworkClient {
             last_ping_time: None,
             rtt: 0.0,
             last_error: None,
+            pending_cursor_updates: Vec::new(),
         }
     }
 
@@ -338,118 +369,113 @@ impl NetworkClient {
         }
     }
 
-    /// メッセージキューを処理し、各メッセージに対して適切なアクションを実行
+    /// 受信メッセージを処理
     pub fn process_messages(&mut self) {
-        // 接続が確立されていない場合は処理しない
-        if !self.connected {
-            return;
+        // 接続状態から最新のメッセージキューを取得
+        let mut messages = Vec::new();
+        if let Ok(mut state) = self.connection_state.try_borrow_mut() {
+            // キューからすべてのメッセージを取り出す
+            while let Some(message) = state.pop_front() {
+                messages.push(message);
+            }
         }
 
-        // キューからすべてのメッセージを取り出し処理する
-        let message_count = self.connection_state.borrow().len();
-        if message_count > 0 {
-            web_sys::console::log_1(&format!("処理するメッセージ数: {}", message_count).into());
+        // メッセージの処理
+        for message in messages {
+            self.handle_message(message);
         }
+    }
 
-        for _ in 0..message_count {
-            if let Some(message) = self.connection_state.borrow_mut().pop_front() {
-                match message.message_type {
-                    MessageType::ConnectResponse { player_id, success, message: msg } => {
-                        if success {
-                            web_sys::console::log_1(&format!("クライアント接続: ID={}", player_id).into());
-                            // クライアントIDを設定
-                            self.player_id = Some(player_id);
-                            self.connected_at = Some(Date::now());
-                            web_sys::console::log_1(&format!("自身のクライアントID設定: {}", player_id).into());
+    /// メッセージを処理する
+    fn handle_message(&mut self, message: NetworkMessage) {
+        match message.message_type {
+            MessageType::ConnectResponse { player_id, .. } => {
+                web_sys::console::log_1(&format!("プレイヤーID受信: {}", player_id).into());
+                self.player_id = Some(player_id);
+            },
+            MessageType::Ping { client_time } => {
+                // Pingに対してPongを返す
+                let pong_message = NetworkMessage::new(MessageType::Pong { 
+                    client_time, 
+                    server_time: js_sys::Date::now() 
+                });
+                let _ = self.send_message(pong_message);
+            },
+            MessageType::Pong { client_time: _, server_time: _ } => {
+                // RTTを計算
+                if let Some(ping_time) = self.last_ping_time {
+                    let now = js_sys::Date::now();
+                    self.rtt = now - ping_time;
+                    web_sys::console::log_1(&format!("🏓 RTT: {:.1}ms", self.rtt).into());
+                }
+            },
+            MessageType::TimeSyncRequest { client_time: _ } => {
+                // サーバーからの時間同期リクエスト
+                let now = js_sys::Date::now();
+                let sync_response = NetworkMessage::new(MessageType::TimeSyncResponse { 
+                    client_time: now,
+                    server_time: message.timestamp,
+                });
+                let _ = self.send_message(sync_response);
+            },
+            MessageType::TimeSyncResponse { client_time, server_time } => {
+                // サーバーからの時間同期レスポンス
+                let now = js_sys::Date::now();
+                let round_trip_time = now - client_time;
+                let server_time_adjusted = server_time + (round_trip_time / 2.0);
+                let time_diff = now - server_time_adjusted;
+                
+                // 時間差を更新
+                self.time_sync_data.update_time_difference(time_diff);
+                
+                web_sys::console::log_1(&format!("⏱️ 時間差: {:.1}ms", time_diff).into());
+            },
+            MessageType::MouseCursorUpdate => {
+                // マウスカーソル更新メッセージの処理
+                web_sys::console::log_1(&"📍 マウスカーソル更新メッセージを受信".into());
+                
+                // メッセージからデータを抽出
+                if let Some(player_id) = message.player_id {
+                    // データをJSONから解析（拡張予定）
+                    if let Ok(data_json) = message.get_data_as_string() {
+                        if let Ok(data) = serde_json::from_str::<MouseCursorUpdateData>(&data_json) {
+                            // 受信したカーソルデータをキューに追加
+                            self.pending_cursor_updates.push(data.clone());
+                            
+                            // ハンドラがあれば呼び出す
+                            call_mouse_cursor_handlers(data);
                         } else {
-                            web_sys::console::error_1(&format!("接続失敗: {}", msg.unwrap_or_default()).into());
-                            self.player_id = None;
-                            self.connected_at = None;
+                            web_sys::console::error_1(&"マウスカーソルデータのパースに失敗".into());
                         }
-                    }
-                    MessageType::Disconnect { reason } => {
-                        web_sys::console::log_1(&format!("クライアント切断: {:?}", reason).into());
-                        // 接続の切断を処理
-                        self.player_id = None;
-                        self.connected_at = None;
-                    }
-                    MessageType::EntityCreate { entity_id } => {
-                        web_sys::console::log_1(&format!("エンティティ作成: ID={}", entity_id).into());
-                        // ここでエンティティ作成処理を実装
-                    }
-                    MessageType::EntityDelete { entity_id } => {
-                        web_sys::console::log_1(&format!("エンティティ削除: ID={}", entity_id).into());
-                        // ここでエンティティ削除処理を実装
-                    }
-                    MessageType::ComponentUpdate => {
-                        // コンポーネント更新の処理
-                        web_sys::console::log_1(&"コンポーネント更新メッセージを受信".into());
-                        if let Some(entity_id) = message.entity_id {
-                            if let Some(_components) = &message.components {
-                                web_sys::console::log_1(&format!("エンティティ{}のコンポーネント更新", entity_id).into());
-                                // コンポーネント更新の処理を実装
-                            }
-                        }
-                    }
-                    MessageType::Input => {
-                        // 入力メッセージの処理
-                        web_sys::console::log_1(&"入力メッセージを受信".into());
-                        if let Some(player_id) = message.player_id {
-                            if player_id != self.player_id.unwrap_or(0) { // 自分の入力はスキップ
-                                web_sys::console::log_1(&format!("プレイヤー{}からの入力", player_id).into());
-                                // 入力処理を実装
-                            }
-                        }
-                    }
-                    MessageType::TimeSyncRequest { client_time: _ } => {
-                        // 時間同期の処理
-                        // こちらは必要ない処理なので削除
-                    }
-                    MessageType::TimeSyncResponse { client_time, server_time } => {
-                        // 時間同期の処理
-                        let now = Date::now();
-                        let rtt = now - client_time;
-                        self.rtt = rtt;
+                    } else {
+                        // データが文字列でない場合、デフォルト値で構築
+                        let cursor_data = MouseCursorUpdateData {
+                            player_id,
+                            x: 0.0,
+                            y: 0.0,
+                            visible: true,
+                        };
                         
-                        // サーバー時間とクライアント時間の差を計算
-                        let time_offset = server_time - (now - rtt / 2.0);
-                        self.time_sync_data.time_offset = time_offset;
-                        self.time_sync_data.rtt = rtt;
-                        self.time_sync_data.last_sync = now;
+                        // 受信したカーソルデータをキューに追加
+                        self.pending_cursor_updates.push(cursor_data.clone());
                         
-                        web_sys::console::log_1(&format!("時間同期: オフセット = {}ms, RTT = {}ms", 
-                                                        time_offset, rtt).into());
-                    }
-                    MessageType::Ping { client_time } => {
-                        // Pingメッセージの処理
-                        web_sys::console::log_1(&format!("Pingメッセージを受信: {}", client_time).into());
-                        // 必要に応じてPong応答を送信
-                    }
-                    MessageType::Pong { client_time, server_time: _ } => {
-                        // Pongメッセージの処理
-                        let now = Date::now();
-                        let rtt = now - client_time;
-                        self.rtt = rtt;
-                        
-                        web_sys::console::log_1(&format!("Pong: RTT = {}ms", rtt).into());
-                    }
-                    MessageType::Error { code, message: error_msg } => {
-                        // エラーメッセージの処理
-                        web_sys::console::error_1(&format!("サーバーエラー ({}): {}", code, error_msg).into());
-                        self.last_error = Some(format!("サーバーエラー ({}): {}", code, error_msg));
-                    }
-                    MessageType::Connect => {
-                        // Connectメッセージは通常クライアントからサーバーに送信されるもの
-                        web_sys::console::warn_1(&"サーバーからConnectメッセージを受信（異常）".into());
-                    }
-                    MessageType::MouseCursorUpdate => {
-                        // マウスカーソル更新メッセージの処理
-                        web_sys::console::log_1(&"マウスカーソル更新メッセージを受信".into());
-                        if let Some(handler) = self.message_handlers.get(&MessageType::MouseCursorUpdate) {
-                            handler(message);
-                        }
+                        // ハンドラがあれば呼び出す
+                        call_mouse_cursor_handlers(cursor_data);
                     }
                 }
+            },
+            MessageType::Disconnect { reason } => {
+                // サーバーからの切断メッセージ
+                web_sys::console::log_1(&format!("🔌 サーバーからの切断: {:?}", reason).into());
+                if let Some(ws) = &self.socket {
+                    let _ = ws.close();
+                }
+                self.connected = false;
+                self.socket = None;
+            },
+            _ => {
+                // その他のメッセージタイプは無視
+                web_sys::console::log_1(&format!("⚠️ 未処理のメッセージタイプ: {:?}", message.message_type).into());
             }
         }
     }
@@ -540,51 +566,68 @@ impl NetworkClient {
         self.last_error.as_ref()
     }
 
-    /// マウスカーソル更新メッセージを送信する
+    /// マウスカーソル位置を送信
     pub fn send_mouse_cursor_update(&mut self, x: f32, y: f32, visible: bool) -> Result<(), NetworkError> {
-        if let Some(player_id) = self.player_id {
-            let data = MouseCursorUpdateData {
-                player_id,
-                x,
-                y,
-                visible,
-            };
-            
-            // マウスカーソル更新メッセージを作成
-            let message = NetworkMessage::new(MessageType::MouseCursorUpdate)
-                .with_player_id(player_id);
-                
-            self.send_message(message)
-        } else {
-            log::warn!("プレイヤーIDが設定されていないためマウスカーソル更新を送信できません");
-            Ok(()) // プレイヤーIDがない場合はエラーとしない
-        }
+        // プレイヤーIDを取得
+        let player_id = match self.player_id {
+            Some(id) => id,
+            None => {
+                web_sys::console::warn_1(&"プレイヤーIDが設定されていないためカーソル更新を送信できません".into());
+                return Ok(());
+            }
+        };
+        
+        // カーソルデータを作成
+        let _data = MouseCursorUpdateData {
+            player_id,
+            x,
+            y,
+            visible,
+        };
+        
+        // JSONにシリアライズ
+        let json_data = match serde_json::to_string(&_data) {
+            Ok(json) => json,
+            Err(e) => {
+                web_sys::console::error_1(&format!("カーソルデータのシリアライズに失敗: {:?}", e).into());
+                return Err(NetworkError::SerializationError);
+            }
+        };
+        
+        // メッセージを作成して送信
+        let mut message = NetworkMessage::new(MessageType::MouseCursorUpdate);
+        message.set_player_id(player_id);
+        message.set_data(json_data);
+        
+        self.send_message(message)
     }
 
-    /// マウスカーソル更新ハンドラを登録する
-    pub fn register_mouse_cursor_handler<F>(&mut self, handler: F)
+    /// マウスカーソル更新ハンドラを登録
+    pub fn register_mouse_cursor_handler<F>(&self, handler: F)
     where
         F: Fn(MouseCursorUpdateData) + 'static,
     {
-        self.message_handlers.insert(
-            MessageType::MouseCursorUpdate,
-            Box::new(move |message| {
-                // プレイヤーIDとメッセージから必要なデータを抽出
-                if let Some(player_id) = message.player_id {
-                    // メッセージからデータを作成
-                    let cursor_data = MouseCursorUpdateData {
-                        player_id,
-                        x: 0.0, // デフォルト値（実際はメッセージから抽出するべき）
-                        y: 0.0, // デフォルト値（実際はメッセージから抽出するべき）
-                        visible: true, // デフォルト値（実際はメッセージから抽出するべき）
-                    };
-                    
-                    // ハンドラを呼び出す
-                    handler(cursor_data);
-                }
-            })
-        );
+        register_mouse_cursor_handler(handler);
     }
+}
+
+/// マウスカーソル更新ハンドラを登録する
+pub fn register_mouse_cursor_handler<F>(handler: F)
+where
+    F: Fn(MouseCursorUpdateData) + 'static,
+{
+    MOUSE_CURSOR_HANDLERS.with(|handlers| {
+        handlers.borrow_mut().push(Box::new(handler));
+    });
+}
+
+/// マウスカーソル更新ハンドラを呼び出す（内部用）
+fn call_mouse_cursor_handlers(data: MouseCursorUpdateData) {
+    MOUSE_CURSOR_HANDLERS.with(|handlers| {
+        for handler in handlers.borrow().iter() {
+            handler(data.clone());
+        }
+    });
 }
 
 #[cfg(test)]
